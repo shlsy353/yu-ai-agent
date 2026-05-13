@@ -1,0 +1,15 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://rm-cn-qiz4s5hrq0003q8o.rwlb.rds.aliyuncs.com:5432/yu_ai_agent
+    username: my_user
+    password: "5Shangjin588!"
+
+  application:
+    name: yu-ai-agent
+  ai:
+    dashscope:
+      api-key: ${DASHSCOPE_API_KEY:sk-679c5650ca48440c8dc6b73b77c99ef8} # 你的阿里云百炼Key
+      chat:
+        options:
+          model: deepseek-v4-flash # 阿里云上的DeepSeek模型名，和你之前用的一致
+          result-format: message

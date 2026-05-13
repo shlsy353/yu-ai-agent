@@ -2,7 +2,22 @@
   "permissions": {
     "allow": [
       "Bash(java -version)",
-      "Bash(javac -version)"
+      "Bash(javac -version)",
+      "Bash(mvn compile *)",
+      "Bash(export JAVA_HOME=\"E:/xuexi_app/jdk_21\")",
+      "Bash(mvn -f \"E:/ieda_project/yu-ai-agent/pom.xml\" dependency:tree -Dincludes=org.springframework.ai)",
+      "Bash(javap *)",
+      "Bash(mvn -f \"E:/ieda_project/yu-ai-agent/pom.xml\" compile)",
+      "WebSearch",
+      "mcp__ide__getDiagnostics",
+      "Bash(mvn clean *)",
+      "Bash(\"E:\\\\xuexi_app\\\\jdk_21\\\\bin\\\\java\" -version)",
+      "Bash(\"E:\\\\xuexi_app\\\\apache-maven-3.9.9\\\\bin\\\\mvn\" clean *)",
+      "Bash(psql *)",
+      "Bash(JAVA_HOME=E:/xuexi_app/jdk_21 E:/xuexi_app/apache-maven-3.9.9/bin/mvn clean test -Dtest=PgVectorVectorStoreConfigTest -DskipTests=false)",
+      "Bash(grep -E \"\\(BUILD|Tests run|FAILURE|SUCCESS|Caused by|AssertionError\\)\" C:/Users/sh/AppData/Local/Temp/claude/E--ieda-project-yu-ai-agent/8ef86ce6-aa29-4711-8671-e5b4a5d53e1a/tasks/be3qrk1ck.output)",
+      "Bash(tail -20 C:/Users/sh/AppData/Local/Temp/claude/E--ieda-project-yu-ai-agent/8ef86ce6-aa29-4711-8671-e5b4a5d53e1a/tasks/be3qrk1ck.output)",
+      "Bash(JAVA_HOME=E:/xuexi_app/jdk_21 E:/xuexi_app/apache-maven-3.9.9/bin/mvn test -Dtest=PgVectorVectorStoreConfigTest)"
     ]
   }
 }
