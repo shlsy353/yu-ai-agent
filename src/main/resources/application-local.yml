@@ -13,3 +13,4 @@ spring:
         options:
           model: deepseek-v4-flash # 阿里云上的DeepSeek模型名，和你之前用的一致
           result-format: message
+

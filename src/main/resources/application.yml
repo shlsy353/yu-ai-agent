@@ -39,9 +39,13 @@ springdoc:
     setting:
       language: zh_cn
 
-  logging:
-    level:
-      org.springframework.ai.chat.client.advisor.SimpleLoggerAdvisor: DEBUG
+  # searchAPI
+search-api:
+  api-key: 5o4Hq9RFqkGHyom2GhzzMXpx
+
+logging:
+  level:
+    org.springframework.ai.chat.client.advisor.SimpleLoggerAdvisor: DEBUG
 
 
 

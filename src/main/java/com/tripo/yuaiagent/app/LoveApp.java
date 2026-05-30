@@ -12,6 +12,7 @@ import org.springframework.ai.chat.client.advisor.api.*;
 import org.springframework.ai.chat.client.advisor.vectorstore.*;
 import org.springframework.ai.chat.memory.*;
 import org.springframework.ai.chat.model.*;
+import org.springframework.ai.tool.*;
 import org.springframework.ai.vectorstore.*;
 import org.springframework.stereotype.*;
 
@@ -150,6 +151,27 @@ public class LoveApp {
                 .advisors(QuestionAnswerAdvisor.builder(loveAppVectorStore).build())
                 .call()
                 .content();
+    }
+
+    // AI 调用工具能力
+    @Resource
+    private ToolCallback[] allTools;
+
+    public String doChatWithTools(String message, String chatId) {
+        ChatResponse response = chatClient
+                .prompt()
+                .user(message)
+                .advisors(spec -> spec
+                        .param(ChatMemory.CONVERSATION_ID, chatId)
+                        .param("chat_memory_retrieve_size", 10))
+
+                .advisors(new MyLoggerAdvisor())
+                .toolCallbacks(allTools)
+                .call()
+                .chatResponse();
+        String content = response.getResult().getOutput().getText();
+        log.info("content: {}", content);
+        return content;
     }
 
 }

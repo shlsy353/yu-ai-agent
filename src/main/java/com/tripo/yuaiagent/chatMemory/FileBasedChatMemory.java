@@ -1,4 +1,4 @@
-package com.tripo.yuaiagent.ChatMemory;
+package com.tripo.yuaiagent.chatMemory;
 
 import com.esotericsoftware.kryo.*;
 import com.esotericsoftware.kryo.io.*;

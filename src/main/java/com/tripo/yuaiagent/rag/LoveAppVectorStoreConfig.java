@@ -31,9 +31,9 @@ public class LoveAppVectorStoreConfig {
         // 分割文档
         // List<Document> splitDocuments = myTokenTextSplitter.splitCustomized(documentList);
         // 自动补充关键字（学习阶段跳过，省 API 费用）
-         List<Document> enrichedDocuments = documentList;
-       simpleVectorStore.add(enrichedDocuments);
-        return simpleVectorStore;
+            List<Document> enrichedDocuments = documentList;
+            simpleVectorStore.add(enrichedDocuments);
+            return simpleVectorStore;
 
     }
 

@@ -1,9 +1,12 @@
 # 项目结构完整解析
+# 本项目为学习项目，在老师原有的项目上进行修改，并添加了 RAG 模型、工具调用（Function Calling）等功能，并完善了代码注释。
 
-> 项目名称：yu-ai-agent（AI 恋爱顾问）
-> 技术栈：Spring Boot 3.5.14 + Spring AI 1.1.x + 阿里云百炼 DashScope
-> 底层模型：DeepSeek-v4-flash（阿里云上的部署）
-> 构建工具：Maven + JDK 21
+> **项目名称**：yu-ai-agent（AI 恋爱顾问）
+> **技术栈**：Spring Boot 3.5.14 + Spring AI 1.1.x + 阿里云百炼 DashScope
+> **底层模型**：DeepSeek-v4-flash（阿里云百炼部署）
+> **构建工具**：Maven + JDK 21
+> **数据库**：PostgreSQL + PGVector（向量检索）
+> **文档**：Swagger (Knife4j) — http://localhost:8123/api/swagger-ui.html
 
 ---
 
@@ -12,45 +15,49 @@
 1. [项目全景图](#一项目全景图)
 2. [文件结构速览](#二文件结构速览)
 3. [核心业务流程详解](#三核心业务流程详解)
-4. [RAG 管线全解析](#四rag-管线全解析)
-5. [三套向量数据库对比](#五三套向量数据库对比)
-6. [Advisor 拦截器链](#六advisor-拦截器链)
-7. [聊天记忆机制](#七聊天记忆机制)
-8. [配置体系](#八配置体系)
-9. [学习路线：从裸调到业务](#九学习路线从裸调到业务)
-10. [常见问题 FAQ](#十常见问题-faq)
+4. [工具调用系统（Function Calling）](#四工具调用系统function-calling)
+5. [RAG 管线全解析](#五rag-管线全解析)
+6. [三套向量数据库对比](#六三套向量数据库对比)
+7. [Advisor 拦截器链](#七advisor-拦截器链)
+8. [聊天记忆机制](#八聊天记忆机制)
+9. [配置体系](#九配置体系)
+10. [学习路线：从裸调到业务](#十学习路线从裸调到业务)
+11. [关键概念速查](#十一关键概念速查)
+12. [常见问题 FAQ](#十二常见问题-faq)
 
 ---
 
 ## 一、项目全景图
 
 ```
-┌──────────────────────────────────────────────────────────────────┐
-│                     LoveApp (业务入口)                            │
-│  @Component                                                      │
-│  ┌─────────────┐  ┌──────────────┐  ┌──────────┐  ┌──────────┐ │
-│  │  doChat()    │  │doChatWith   │  │doChatWith│  │recommend │ │
-│  │  普通聊天    │  │Report()     │  │Rag()     │  │Partner() │ │
-│  │             │  │ 恋爱报告     │  │ 知识库   │  │ 推荐对象  │ │
-│  └──────┬──────┘  └──────┬───────┘  └────┬─────┘  └────┬─────┘ │
-│         │                │               │              │       │
-│         └────────┬───────┴───────┬───────┴──────────────┘       │
-│                  │               │                              │
-│         ┌────────▼───────────────▼──────────────────────┐       │
-│         │         ChatClient (核心聊天客户端)             │       │
-│         │  builder(dashscopeChatModel)                   │       │
-│         │  .defaultSystem("恋爱顾问提示词")               │       │
-│         │  .defaultAdvisors(MyLoggerAdvisor,             │       │
-│         │                  MessageChatMemoryAdvisor)     │       │
-│         └────────────────────┬──────────────────────────┘       │
-│                              │                                   │
-└──────────────────────────────┼───────────────────────────────────┘
-                               │
-                               ▼
-                    ┌──────────────────┐
-                    │  DashScope API    │  ← 阿里云百炼
-                    │  (DeepSeek 模型)   │
-                    └──────────────────┘
+┌──────────────────────────────────────────────────────────────────────────┐
+│                         LoveApp (业务入口)                                │
+│  @Component                                                              │
+│  ┌──────────┐  ┌──────────────┐  ┌──────────┐  ┌──────────┐  ┌────────┐ │
+│  │ doChat() │  │doChatWith    │  │doChatWith│  │recommend │  │doChat  │ │
+│  │ 普通聊天 │  │Report()      │  │Rag()     │  │Partner() │  │With    │ │
+│  │          │  │ 恋爱报告     │  │ 知识库   │  │ 推荐对象 │  │Tools() │ │
+│  └────┬─────┘  └──────┬───────┘  └────┬────┘  └────┬─────┘  │ 工具调用 │
+│       │               │               │           │         └────┬────┘ │
+│       └────────┬──────┴───────┬───────┴───────────┘              │      │
+│                │              │                                  │      │
+│       ┌────────▼──────────────▼──────────────────────────┐       │      │
+│       │              ChatClient (核心聊天客户端)            │       │      │
+│       │  builder(dashscopeChatModel)                      │       │      │
+│       │  .defaultSystem("恋爱顾问提示词")                   │       │      │
+│       │  .defaultAdvisors(MyLoggerAdvisor,                │       │      │
+│       │                MessageChatMemoryAdvisor)          │       │      │
+│       └────────────────────┬─────────────────────────────┘       │      │
+│                            │                                      │      │
+└────────────────────────────┼──────────────────────────────────────┼──────┘
+                             │                                      │
+                             ▼                                      ▼
+                    ┌──────────────────┐              ┌──────────────────────┐
+                    │  DashScope API    │              │  6 个 Tool 工具      │
+                    │  (DeepSeek 模型)   │              │  联网搜索 / 网页抓取  │
+                    └──────────────────┘              │  文件读写 / 下载      │
+                                                      │  PDF生成 / 终端命令   │
+                                                      └──────────────────────┘
 
     ┌────────────────── 三条外部数据通道 ──────────────────┐
     │                                                      │
@@ -85,7 +92,16 @@ yu-ai-agent/
 │   ├── YuAiAgentApplication.java                    # ★ 启动类
 │   │
 │   ├── app/
-│   │   └── LoveApp.java                             # ★★★ 核心业务 (4个功能)
+│   │   └── LoveApp.java                             # ★★★ 核心业务 (5个功能)
+│   │
+│   ├── tools/                                       # ★★ 工具调用（新增）
+│   │   ├── ToolRegistration.java                    #   工具注册中心（@Configuration）
+│   │   ├── WebSearchTool.java                       #   百度联网搜索
+│   │   ├── WebScrapingTool.java                     #   网页内容抓取
+│   │   ├── FileOperationTool.java                   #   文件读写操作
+│   │   ├── ResourceDownloadTool.java                #   网络资源下载
+│   │   ├── PDFGenerationTool.java                   #   PDF 文档生成
+│   │   └── TerminalOperationTool.java               #   终端命令执行
 │   │
 │   ├── rag/                                         # ★★ RAG 相关组件
 │   │   ├── LoveAppDocumentLoader.java               #   加载 markdown 文档
@@ -100,15 +116,18 @@ yu-ai-agent/
 │   │   ├── MyLoggerAdvisor.java                     #   请求/响应日志
 │   │   └── ReReadingAdvisor.java                    #   Re2 重复阅读优化
 │   │
-│   ├── ChatMemory/
+│   ├── chatMemory/
 │   │   └── FileBasedChatMemory.java                 #   Kryo 持久化聊天记录
+│   │
+│   ├── constant/
+│   │   └── FileConstant.java                        # ★ 文件保存路径常量
 │   │
 │   ├── controller/
 │   │   └── HealthyController.java                   #   GET /api/healthy
 │   │
 │   └── demo/invoke/                                 # 四个逐步进阶的调用示例
 │       ├── HttpAiInvoke.java                        #   HTTP 裸调 (Hutool)
-│       ├── SdkAiInvoke.java                         #   DashScope SDK 调
+│       ├── SdkAiInvoke.java                         #   DashScope SDK 调用
 │       ├── SpringAiInvoke.java                      #   Spring AI ChatModel
 │       └── TestApiKey.java                          #   API Key 定义
 │
@@ -122,8 +141,14 @@ yu-ai-agent/
 │       └── 恋爱对象库.md
 │
 └── src/test/java/com/tripo/yuaiagent/
-    ├── YuAiAgentApplicationTests.java               # 启动测试
-    ├── app/LoveAppTest.java                         # ★ 集成测试 (4个方法)
+    ├── app/LoveAppTest.java                         # ★ 集成测试 (5个测试方法)
+    ├── tools/                                       # ★★ 工具单元测试（新增）
+    │   ├── WebSearchToolTest.java
+    │   ├── WebScrapingToolTest.java
+    │   ├── FileOperationToolTest.java
+    │   ├── ResourceDownloadToolTest.java
+    │   ├── PDFGenerationToolTest.java
+    │   └── TerminalOperationToolTest.java
     ├── rag/LoveAppDocumentLoaderTest.java           # 文档加载测试
     └── rag/PgVectorVectorStoreConfigTest.java       # PGVector 测试
 ```
@@ -261,7 +286,138 @@ LoveApp.recommendPartner("请你给我推荐一个25岁的程序员...")
 
 ---
 
-## 四、RAG 管线全解析
+### 流程 5：doChatWithTools() —— 工具调用（Function Calling）★★★
+
+```
+你: "周末想去上海约会，推荐小众打卡地"
+  │
+  ▼
+LoveApp.doChatWithTools("周末想带女朋友去上海约会...", chatId)
+  │
+  ├─ 第 1 步：AI 决定要调用什么工具
+  │   DeepSeek 模型分析用户意图
+  │   → "用户想去上海约会，需要查找小众打卡地"
+  │   → 决定调用 WebSearchTool.searchWeb("上海小众约会打卡地推荐")
+  │
+  ├─ 第 2 步：执行工具
+  │   框架自动调用对应的 Java 方法
+  │   → WebSearchTool.searchWeb("上海小众约会打卡地推荐")
+  │   → 发起 HTTP 请求到 searchapi.io，搜索百度
+  │   → 返回搜索结果（JSON 格式）
+  │
+  ├─ 第 3 步：工具结果返回给 AI
+  │   模型看到: "搜索结果：田子坊、1933老场坊..."
+  │   → 模型根据搜索结果生成自然语言回复
+  │
+  └─ 返回: "推荐上海几个小众约会圣地：1. 田子坊..."
+
+---
+
+更复杂的工具调用链路（多个工具协同）：
+
+```
+你: "下载一张星空情侣壁纸，保存到本地"
+  │
+  ├─ AI 分析: 需要"下载图片"
+  │   → 先调用 WebSearchTool.searchWeb("星空情侣壁纸")
+  │   → 搜索结果里有图片 URL
+  │
+  ├─ AI 再决定: 需要"保存图片到本地"
+  │   → 调用 ResourceDownloadTool.downloadResource(url, "星空壁纸.jpg")
+  │   → 文件保存到 ./tmp/download/星空壁纸.jpg
+  │
+  └─ 返回: "已经下载好了，保存在 ./tmp/download/ 目录下"
+
+---
+
+你: "生成一份七夕约会计划 PDF"
+  │
+  ├─ AI 分析: 需要"生成 PDF 文件"
+  │   → 先自己构思内容（餐厅预订、活动流程、礼物清单...）
+  │   → 调用 PDFGenerationTool.generatePDF("七夕约会计划.pdf", content)
+  │   → PDF 保存到 ./tmp/pdf/七夕约会计划.pdf
+  │
+  └─ 返回: "已经生成好了，内容包含..." + PDF 下载路径
+```
+
+**工具调用的本质**：AI 模型自己决定"我现在需要执行哪个函数来获取信息或完成操作"，而不是人写死的固定流程。
+
+---
+
+## 四、工具调用系统（Function Calling）
+
+### 什么是 Function Calling？
+
+Function Calling（函数调用）让 AI 模型能主动调用外部工具：
+
+```
+传统 Chat：用户 → AI（只能动嘴说）
+工具调用： 用户 → AI（决定需要什么工具）→ 执行 Java 方法 → 结果返回 AI → AI 回复用户
+```
+
+### 6 个注册工具一览
+
+所有工具在 `ToolRegistration.java` 中统一注册为 `ToolCallback[]` Bean，然后注入到 `LoveApp`。
+
+| 工具 | 类名 | @Tool 方法 | 能力 | 依赖 |
+|------|------|-----------|------|------|
+| **联网搜索** | `WebSearchTool` | `searchWeb(query)` | 通过 searchapi.io 调用百度搜索 | searchapi.io API Key |
+| **网页抓取** | `WebScrapingTool` | `scrapeWebPage(url)` | 爬取指定 URL 的 HTML 内容 | Jsoup |
+| **文件读写** | `FileOperationTool` | `readFile(fileName)` / `writeFile(fileName, content)` | 读取/写入文件到 `./tmp/file/` | Hutool |
+| **资源下载** | `ResourceDownloadTool` | `downloadResource(url, fileName)` | 下载网络资源到 `./tmp/download/` | Hutool |
+| **PDF 生成** | `PDFGenerationTool` | `generatePDF(fileName, content)` | 生成 PDF 文件到 `./tmp/pdf/` | iText |
+| **终端命令** | `TerminalOperationTool` | `executeTerminalCommand(command)` | 执行 cmd.exe 命令 | 无 |
+
+### 工具注册机制
+
+```java
+@Configuration
+public class ToolRegistration {
+
+    @Value("${search-api.api-key}")
+    private String searchApiKey;
+
+    @Bean
+    public ToolCallback[] allTools() {
+        return ToolCallbacks.from(
+            new FileOperationTool(),
+            new WebSearchTool(searchApiKey),
+            new WebScrapingTool(),
+            new ResourceDownloadTool(),
+            new TerminalOperationTool(),
+            new PDFGenerationTool()
+        );
+    }
+}
+```
+
+**关键点**：Spring AI 中工具注册有两种方式：
+- `tools(Object...)` — 传入普通对象，框架自动扫描 @Tool 注解（用于构建时）
+- `toolCallbacks(ToolCallback...)` — 传入已经构建好的 ToolCallback 实例（用于调用时）
+
+`LoveApp.doChatWithTools()` 中调用 `.toolCallbacks(allTools)`，因为 `allTools` 已经是 `ToolCallback[]`。
+
+### 文件保存目录
+
+所有文件操作（读写、下载、PDF）统一保存在：
+
+```java
+FileConstant.File_SAVE_DIR = System.getProperty("user.dir") + "/tmp"
+```
+
+即项目根目录下的 `tmp/` 文件夹，按工具类型分子目录：
+
+```
+项目根目录/
+  └── tmp/
+      ├── file/        ← FileOperationTool 读写
+      ├── download/    ← ResourceDownloadTool 下载
+      └── pdf/         ← PDFGenerationTool 生成
+```
+
+---
+
+## 五、RAG 管线全解析
 
 ### 什么是 RAG？
 
@@ -336,7 +492,7 @@ RAG 对话：
 
 ---
 
-## 五、三套向量数据库对比
+## 六、三套向量数据库对比
 
 这个项目里有三套完全不同的知识库方案。它们互不干扰，各自服务于不同的功能：
 
@@ -362,7 +518,7 @@ RAG 对话：
 
 ---
 
-## 六、Advisor 拦截器链
+## 七、Advisor 拦截器链
 
 ### 什么是 Advisor？
 
@@ -398,7 +554,7 @@ Advisor = Spring AI 里的**拦截器**。在发消息给 AI 之前、收到 AI 
 
 ---
 
-## 七、聊天记忆机制
+## 八、聊天记忆机制
 
 ### 当前使用的记忆方式
 
@@ -427,14 +583,14 @@ public class FileBasedChatMemory implements ChatMemory {
 
 ---
 
-## 八、配置体系
+## 九、配置体系
 
 ### 双配置文件
 
 ```
 application.yml          → 公共配置（git 跟踪）
-application-local.yml    → 本地敏感配置（gitignore）
-                         
+application-local.yml    → 本地敏感配置（.gitignore 忽略）
+
 spring.profiles.active: local  → 激活 local 配置
 ```
 
@@ -453,6 +609,9 @@ server:
   port: 8123
   servlet:
     context-path: /api            # 接口前缀
+
+search-api:
+  api-key: xxx                    # searchapi.io 的 API Key（联网搜索用）
 ```
 
 ### application-local.yml（本地）
@@ -465,10 +624,10 @@ spring:
     password: root
   ai:
     dashscope:
-      api-key: sk-xxx
+      api-key: sk-xxx             # 阿里云百炼 API Key
       chat:
         options:
-          model: deepseek-v4-flash
+          model: deepseek-v4-flash  # 阿里云上的 DeepSeek 模型
 ```
 
 ### @SpringBootApplication(exclude = ...)
@@ -481,7 +640,7 @@ spring:
 
 ---
 
-## 九、学习路线：从裸调到业务
+## 十、学习路线：从裸调到业务
 
 ```
 第 1 层：HttpAiInvoke                    HTTP + Hutool 手写请求
@@ -497,7 +656,7 @@ spring:
   │
   ▼
 第 4 层：LoveApp (当前)                   ChatClient 编排业务流程
-  │      "加记忆、加 RAG、加结构化输出"
+  │      "加记忆、加 RAG、加工具调用"
   │
   ▼
 第 5 层（下一步）：REST 接口              @RestController 暴露给前端
@@ -512,7 +671,7 @@ spring:
 
 ---
 
-## 十、关键概念速查
+## 十一、关键概念速查
 
 | 概念 | 一句话解释 | 类比 |
 |------|-----------|------|
@@ -524,12 +683,32 @@ spring:
 | **Embedding** | 把文本转成一串数字（向量） | 给每本书算一个"指纹" |
 | **相似度搜索** | 找向量最接近的文档 | 指纹最像的那本书 |
 | **RAG** | 先查资料再回答 | 开卷考试 vs 闭卷考试 |
+| **Function Calling** | AI 决定调用哪个 Java 方法 | AI 会"动手"而不是只动嘴 |
+| **Tool** | AI 可以调用的外部功能（如搜索、写文件） | AI 的"工具包" |
 | **Token** | AI 理解的最小单位（≈0.75 个汉字） | 积木的最小颗粒 |
 | **Query Rewriting** | 把用户问题改得更容易检索 | 把模糊问题改清晰 |
 
 ---
 
-## 十一、常见问题
+## 十二、常见问题 FAQ
+
+### Q：启动报错"不支持发行版本 21"怎么办？
+A：你的 JDK 版本低于 21。项目要求 JDK 21。两种方案：
+- 安装 JDK 21 并把系统 `JAVA_HOME` 指向它
+- 在终端临时切换：PowerShell 执行 `$env:JAVA_HOME = "你的JDK21路径"`
+
+### Q：启动报错 `No @Tool annotated methods found` 是什么原因？
+A：`LoveApp.doChatWithTools()` 中用了 `.tools(allTools)`，但 `allTools` 已经是 `ToolCallback[]` 类型，应该用 `.toolCallbacks(allTools)`。Spring AI 1.1.x 中这两个方法用途不同：
+- `tools(Object...)` — 传入普通对象，框架自动扫描 `@Tool` 注解
+- `toolCallbacks(ToolCallback...)` — 传入已经构建好的回调实例
+
+### Q：我可以换成 DeepSeek 官方 API Key 吗？
+A：不能直接换。你当前用的是阿里云百炼的 API Key（`spring.ai.dashscope.api-key`），底层的 DeepSeek 模型也是部署在阿里云上的。想用 DeepSeek 官方 API 需要：
+1. 把 Maven 依赖从 `spring-ai-alibaba-starter-dashscope` 换成对应的 OpenAI 兼容 starter
+2. 修改配置指向 `api.deepseek.com`
+3. RAG 知识库（阿里云百炼独有功能）需要替换方案
+
+简单说：**只换 key 不行，要换整套集成方案。**
 
 ### Q：为什么有时启动报错说找不到 Bean？
 A：最常见的原因是 `PgVectorVectorStoreConfig` 里的 bean 名和 `LoveApp` 里的 `@Resource` 字段名对不上。`@Resource` 先按**字段名**匹配 Bean，匹配不上就按**类型**匹配，如果有多个同类型就报错。
@@ -545,3 +724,14 @@ A：`LoveAppDocumentLoader` 在启动时通过 `@Resource` 被 `LoveAppVectorSto
 
 ### Q：PgVectorVectorStore 为什么没有用在任何业务方法里？
 A：目前还处于测试阶段。`PgVectorVectorStoreConfigTest` 验证了它能正常工作，但还没有业务方法接入。这是留给后续扩展的"基础设施"。
+
+### Q：文件保存到哪里了？
+A：所有工具生成的文件统一保存在项目根目录的 `tmp/` 下：
+- `./tmp/file/` — 文件读写操作
+- `./tmp/download/` — 资源下载
+- `./tmp/pdf/` — PDF 生成
+
+路径定义在 `FileConstant.File_SAVE_DIR = System.getProperty("user.dir") + "/tmp"`。
+
+### Q：联网搜索需要什么配置？
+A：需要在 `application-local.yml` 中配置 `search-api.api-key`，这是 searchapi.io 的 API Key。不配的话联网搜索工具会报错。
