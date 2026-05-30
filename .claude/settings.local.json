@@ -17,7 +17,28 @@
       "Bash(JAVA_HOME=E:/xuexi_app/jdk_21 E:/xuexi_app/apache-maven-3.9.9/bin/mvn clean test -Dtest=PgVectorVectorStoreConfigTest -DskipTests=false)",
       "Bash(grep -E \"\\(BUILD|Tests run|FAILURE|SUCCESS|Caused by|AssertionError\\)\" C:/Users/sh/AppData/Local/Temp/claude/E--ieda-project-yu-ai-agent/8ef86ce6-aa29-4711-8671-e5b4a5d53e1a/tasks/be3qrk1ck.output)",
       "Bash(tail -20 C:/Users/sh/AppData/Local/Temp/claude/E--ieda-project-yu-ai-agent/8ef86ce6-aa29-4711-8671-e5b4a5d53e1a/tasks/be3qrk1ck.output)",
-      "Bash(JAVA_HOME=E:/xuexi_app/jdk_21 E:/xuexi_app/apache-maven-3.9.9/bin/mvn test -Dtest=PgVectorVectorStoreConfigTest)"
+      "Bash(JAVA_HOME=E:/xuexi_app/jdk_21 E:/xuexi_app/apache-maven-3.9.9/bin/mvn test -Dtest=PgVectorVectorStoreConfigTest)",
+      "Bash(pg_isready)",
+      "Bash(git --version)",
+      "Read(//c/Program Files/**)",
+      "Read(//c/Program Files \\(x86\\)/Microsoft Visual Studio//**)",
+      "WebFetch(domain:github.com)",
+      "Bash(gh --version)",
+      "Bash(curl -sL \"https://github.com/andreiramani/pgvector_pgsql_windows/releases/download/0.8.2_17.6/vector.v0.8.2-pg17.zip\" -o \"/tmp/vector.zip\")",
+      "Read(//tmp/**)",
+      "Bash(unzip -l /tmp/vector.zip)",
+      "Bash(unzip -o /tmp/vector.zip -d /tmp/pgvector_ext/)",
+      "Bash(cp /tmp/pgvector_ext/lib/vector.dll \"E:/xuexi_app/PostgreSQL/lib/\")",
+      "Bash(cp /tmp/pgvector_ext/share/extension/vector.control \"E:/xuexi_app/PostgreSQL/share/extension/\")",
+      "Bash(cp /tmp/pgvector_ext/share/extension/vector--*.sql \"E:/xuexi_app/PostgreSQL/share/extension/\")",
+      "Read(//e/xuexi_app/PostgreSQL/lib/**)",
+      "Bash(cmd.exe /c \"net stop postgresql* 2>nul & timeout /t 2 >nul\")",
+      "Read(//e/xuexi_app/PostgreSQL/share/extension/**)",
+      "Bash(\"E:/xuexi_app/PostgreSQL/bin/psql\" -U postgres -d yu_ai_agent -c \"CREATE EXTENSION IF NOT EXISTS vector;\")",
+      "Bash(\"E:/xuexi_app/PostgreSQL/bin/psql\" -U postgres -d yu_ai_agent -c \"SELECT extname, extversion FROM pg_extension WHERE extname='vector';\")",
+      "Bash(E:/xuexi_app/PostgreSQL/bin/pg_ctl start *)",
+      "Bash(cmd.exe /c 'start \"\" \"E:\\\\xuexi_app\\\\PostgreSQL\\\\bin\\\\pg_ctl.exe\" start -D \"E:\\\\xuexi_app\\\\PostgreSQL\\\\data\" -w')",
+      "Bash(PGPASSWORD=root \"E:/xuexi_app/PostgreSQL/bin/psql\" -U postgres -d yu_ai_agent -c \"SELECT 1;\")"
     ]
   }
 }

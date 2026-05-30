@@ -1,8 +1,8 @@
 spring:
   datasource:
-    url: jdbc:postgresql://rm-cn-qiz4s5hrq0003q8o.rwlb.rds.aliyuncs.com:5432/yu_ai_agent
-    username: my_user
-    password: "5Shangjin588!"
+    url: jdbc:postgresql://localhost:5432/yu_ai_agent
+    username: postgres
+    password: root
 
   application:
     name: yu-ai-agent

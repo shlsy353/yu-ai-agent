@@ -2,6 +2,7 @@ package com.tripo.yuaiagent.app;
 
 
 import com.tripo.yuaiagent.advisor.*;
+import com.tripo.yuaiagent.rag.*;
 import jakarta.annotation.*;
 import java.util.*;
 import lombok.extern.slf4j.*;
@@ -106,6 +107,11 @@ public class LoveApp {
     private VectorStore loveAppVectorStore;
     @Resource
     private Advisor loveAppRagCloudAdvisor;
+    @Resource
+    private VectorStore pgVectorVectorStore;
+    @Resource
+    private QueryRewriter queryRewriter;
+
 
     /**
      * AI 恋爱知识库问答功能---RAG
@@ -115,9 +121,13 @@ public class LoveApp {
      * @return
      */
     public String doChatWithRag(String message, String chatId) {
+        // 查询重写
+        String rewritenMessage = queryRewriter.doQueryRewrite(message);
+
+
         String content = chatClient
                 .prompt()
-                .user(message)
+                .user(rewritenMessage)
                 .advisors(spec -> spec
                         .param(ChatMemory.CONVERSATION_ID, chatId)
                         .param("chat_memory_retrieve_size", 10))

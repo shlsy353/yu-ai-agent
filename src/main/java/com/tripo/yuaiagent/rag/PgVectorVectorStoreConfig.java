@@ -17,7 +17,7 @@ public class PgVectorVectorStoreConfig {
     @Resource
     private LoveAppDocumentLoader loveAppDocumentLoader;
         @Bean
-        public VectorStore vectorStore(JdbcTemplate jdbcTemplate, EmbeddingModel dashscopeEmbeddingModel) {
+        public VectorStore pgVectorVectorStore(JdbcTemplate jdbcTemplate, EmbeddingModel dashscopeEmbeddingModel) {
             return PgVectorStore.builder(jdbcTemplate, dashscopeEmbeddingModel)
                     .dimensions(1024)                    // Optional: defaults to model dimensions or 1536
                     .distanceType(COSINE_DISTANCE)       // Optional: defaults to COSINE_DISTANCE
