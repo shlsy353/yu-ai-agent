@@ -82,4 +82,12 @@ class LoveAppTest {
         assertNotNull(answer);
     }
 
+    @Test
+    void doChatWithAMcp(){
+        String chatId = UUID.randomUUID().toString();
+        // 测试图片搜索
+        String answer = loveApp.doChatWithTools("请用中文描述一个25岁的程序员，并搜索相关的图片", chatId);
+        assertNotNull(answer);
+    }
+
 }

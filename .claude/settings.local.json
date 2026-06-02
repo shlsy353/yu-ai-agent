@@ -45,7 +45,15 @@
       "Read(//e/xuexi_app/apache-maven-3.9.9/repo/org/springframework/ai/spring-ai-core/**)",
       "Bash(jar xf *)",
       "Bash(find /tmp/org -name \"*.class\" -path \"*ToolCallback*\")",
-      "Bash(JAVA_HOME=\"E:/xuexi_app/jdk_21\" mvn test -Dtest=LoveAppTest#doChatWithTools -pl .)"
+      "Bash(JAVA_HOME=\"E:/xuexi_app/jdk_21\" mvn test -Dtest=LoveAppTest#doChatWithTools -pl .)",
+      "Bash(where javac *)",
+      "Bash(where java *)",
+      "Bash(export PATH=\"$JAVA_HOME/bin:$PATH\")",
+      "Bash(mvn dependency:tree)",
+      "Read(//c/Users/sh/.m2/repository/org/springframework/**)",
+      "Read(//c/Users/sh/.m2//**)",
+      "Read(//c/Users/sh/.m2/repository//**)",
+      "WebFetch(domain:mvnrepository.com)"
     ]
   }
 }

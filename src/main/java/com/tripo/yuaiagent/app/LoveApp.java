@@ -1,6 +1,5 @@
 package com.tripo.yuaiagent.app;
 
-
 import com.tripo.yuaiagent.advisor.*;
 import com.tripo.yuaiagent.rag.*;
 import jakarta.annotation.*;
@@ -19,7 +18,6 @@ import org.springframework.stereotype.*;
 @Component
 @Slf4j
 public class LoveApp {
-
 
     private final ChatClient chatClient;
 

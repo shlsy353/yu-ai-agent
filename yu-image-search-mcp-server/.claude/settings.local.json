@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mvn dependency:tree -Dincludes=\"org.junit*\")",
+      "Bash(mvn dependency:tree -Dincludes=\"*surefire*\")",
+      "Bash(mvn *)",
+      "Bash(jar tf *)",
+      "Read(//c/Users/sh/.m2/repository/org/junit/platform/junit-platform-commons//**)",
+      "Read(//e/xuexi_app/apache-maven-3.9.9/repo/org/junit/platform/junit-platform-commons//**)",
+      "Bash(javap *)",
+      "Bash(JAVA_HOME=\"E:/xuexi_app/jdk_21\" mvn clean test -pl .)"
+    ]
+  }
+}

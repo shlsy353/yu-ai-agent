@@ -3,6 +3,7 @@ package com.tripo.yuaiagent.advisor;
 import java.util.*;
 import org.springframework.ai.chat.client.*;
 import org.springframework.ai.chat.client.advisor.api.*;
+import org.springframework.ai.chat.messages.*;
 import org.springframework.ai.chat.prompt.*;
 
 public class ReReadingAdvisor implements BaseAdvisor {
@@ -26,15 +27,19 @@ public class ReReadingAdvisor implements BaseAdvisor {
 
 	@Override
 	public ChatClientRequest before(ChatClientRequest chatClientRequest, AdvisorChain advisorChain) {
+		String userText = chatClientRequest.prompt().getUserMessage().getText();
 		String augmentedUserText = PromptTemplate.builder()
-			.template(this.re2AdviseTemplate)
-			.variables(Map.of("re2_input_query", chatClientRequest.prompt().getUserMessage().getText()))
-			.build()
-			.render();
+				.template(this.re2AdviseTemplate)
+				.variables(Map.of("re2_input_query", (Object) userText))
+				.build()
+				.render();
+
+		Prompt augmentedPrompt = chatClientRequest.prompt()
+				.augmentUserMessage(msg -> new UserMessage(augmentedUserText));
 
 		return chatClientRequest.mutate()
-			.prompt(chatClientRequest.prompt().augmentUserMessage(augmentedUserText))
-			.build();
+				.prompt(augmentedPrompt)
+				.build();
 	}
 
 	@Override
@@ -43,7 +48,7 @@ public class ReReadingAdvisor implements BaseAdvisor {
 	}
 
 	@Override
-	public int getOrder() { 
+	public int getOrder() {
 		return this.order;
 	}
 

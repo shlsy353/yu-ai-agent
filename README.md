@@ -45,7 +45,7 @@
 │       │              ChatClient (核心聊天客户端)            │       │      │
 │       │  builder(dashscopeChatModel)                      │       │      │
 │       │  .defaultSystem("恋爱顾问提示词")                   │       │      │
-│       │  .defaultAdvisors(MyLoggerAdvisor,                │       │      │
+│       │  .defaultAdvisors(MyL oggerAdvisor,                │       │      │
 │       │                MessageChatMemoryAdvisor)          │       │      │
 │       └────────────────────┬─────────────────────────────┘       │      │
 │                            │                                      │      │
@@ -165,11 +165,7 @@ yu-ai-agent/
   ▼
 LoveApp.doChat("我叫小王", chatId)
   │
-  │  chatClient.prompt().user("我叫小王")
-  │     .advisors(spec -> spec
-  │         .param("conversation_id", chatId)
-  │         .param("chat_memory_retrieve_size", 10))
-  │     .call()
+  │    
   │
   ├─ [Advisor 1] MyLoggerAdvisor.before()
   │   打印: request = ...
@@ -735,3 +731,208 @@ A：所有工具生成的文件统一保存在项目根目录的 `tmp/` 下：
 
 ### Q：联网搜索需要什么配置？
 A：需要在 `application-local.yml` 中配置 `search-api.api-key`，这是 searchapi.io 的 API Key。不配的话联网搜索工具会报错。
+
+---
+
+## 十三、项目面试常见问题
+
+### Q1：请你解释一下 RAG 的工作原理，以及在这个项目中是如何实现的？
+
+**考察点**：RAG 理解深度
+
+RAG（检索增强生成）的核心思路是"先查后答"——在让大模型回答问题之前，先从外部知识库检索相关文档 ，
+把这些文档作为上下文注入到 prompt 中，让模型基于真实资料回答，而不是凭空编造。
+
+本项目实现了完整的 RAG 管线：
+
+- **文档加载**：`LoveAppDocumentLoader` 在启动时从 `document/*.md` 读取知识文件
+- **文本分割**：`MyTokenTextSplitter` 按 token 数将长文档切分成小块
+- **关键词增强**：`MyKeywordEnricher` 用 AI 自动给每一段提取关键词标签
+- **查询重写**：`QueryRewriter` 在检索前把用户口语化问题改写得更利于匹配
+- **向量检索**：将问题和文档都转为 embedding 向量，通过相似度计算找到最相关的片段
+- **结果注入**：通过 Advisor 拦截器把检索到的资料拼接到 prompt 中，最终交给模型回答
+
+实现方式上有两套方案：`recommendPartner()` 用内存 `SimpleVectorStore` + `QuestionAnswerAdvisor`，`doChatWithRag()` 用阿里云百炼知识库 + 
+`DashScopeDocumentRetriever`。一个轻量快速，一个生产级云方案。
+
+---
+
+### Q2：Spring AI 中 `ChatModel` 和 `ChatClient` 有什么区别？为什么项目用的是 `ChatClient`？
+
+**考察点**：Spring AI 框架理解
+
+`ChatModel` 是底层接口，直接封装对 AI 模型的 HTTP 调用。如果用 `ChatModel`，你要手动拼接 prompt、处理 advisor、管理记忆等。
+
+`ChatClient` 是高级 API，采用 Builder 模式提供了链式调用的流畅 API，内置了对 Advisor 拦截器链、聊天记忆、工具注册、输出解析等功能的支持。
+
+类比：`ChatModel` 就像裸 TCP 连接，`ChatClient` 就像 HTTP 客户端库。项目用 `ChatClient` 是因为业务方法涉及多个横切关注点（日志、记忆、RAG、工具调用），
+用 `ChatClient` 一行 `.advisors()`、`.tools()` 就能搞定，如果用 `ChatModel` 这些全得手写。
+
+---
+
+### Q3：Function Calling（工具调用）在这个项目中是怎么实现的？AI 是如何决定调用哪个工具的？
+
+**考察点**：Function Calling 机制理解
+
+实现分为三个层面：
+
+1. **工具定义**：每个工具是一个普通的 Spring Bean，方法上标注 `@Tool` 注解并写明 `description`。
+Spring AI 启动时扫描这些注解，将方法签名和描述信息注册为模型的 function schema。
+2. **工具注册**：`ToolRegistration.java` 用 `ToolCallbacks.from()` 将所有工具实例统一注册为 `ToolCallback[]` Bean。
+3. **工具调用**：`LoveApp.doChatWithTools()` 中调用 `.toolCallbacks(allTools)` 把工具列表传给 ChatClient。
+
+AI 决定调用哪个工具的机制是：
+- 用户提问后，模型分析用户意图，判断"要回答这个问题，我需要调用什么工具"
+- 模型检查已注册工具的 function schema（描述+参数），选择最匹配的工具
+- 模型返回一个特殊的 function_call 请求，Spring AI 框架拦截这个请求，自动调用对应的 Java 方法
+- 调用结果返回给模型，模型根据结果生成最终回复
+
+关键点：工具描述要写清楚。描述写得模糊，AI 就不知道该不该调用。比如 `@Tool(description: "搜索百度获取最新信息")` 比 `@Tool` 效果好得多。
+
+---
+
+### Q4：项目中有三套向量数据库，它们分别用在什么场景？为什么要有三套？
+
+**考察点**：架构取舍意识
+
+三套方案对应三种不同的应用场景和学习阶段：
+
+| 方案 | 本质 | 场景 |
+|------|------|------|
+| `SimpleVectorStore` | Java 内存 | 快速原型、小型数据集、开发调试 |
+| 阿里云百炼知识库 | 托管云服务 | 不想运维、愿意付费、快速上线 |
+| PGVector | 自建 PostgreSQL | 生产环境、数据量大、完全掌控 |
+
+为什么要有三套？这是一个从简单到复杂的学习轨迹：
+1. 先用内存方案理解"向量检索是什么"（零依赖，跑起来就明白）
+2. 再用云方案理解"生产环境怎么用"（不用管运维，但知道钱在哪）
+3. 最后用 PGVector 理解"完全自建怎么做"（掌握每个细节）
+
+这在真实开发中很常见——早期快速验证用简单方案，随着业务增长逐步迁移到更强的方案。你不需要一开始就上 PGVector，但你要知道什么时候该换。
+
+---
+
+### Q5：Advisor 拦截器链的执行顺序是怎样的？如何控制顺序？
+
+**考察点**：Spring AI Advisor 机制理解
+
+执行顺序（以 `doChatWithRag()` 为例）：
+
+```
+请求 → MyLoggerAdvisor.before()         ① 日志
+     → MessageChatMemoryAdvisor.before() ② 加载历史
+     → loveAppRagCloudAdvisor            ③ RAG 检索
+     → [AI 模型调用]
+     → MessageChatMemoryAdvisor.after()  ④ 保存历史
+     → MyLoggerAdvisor.after()           ⑤ 日志
+← 响应
+```
+
+控制顺序的方式：Advisor 在 `ChatClient.Builder` 中注册的顺序决定了执行顺序。`LoveApp` 构造函数中：
+
+```java
+this.chatClient = ChatClient.builder(dashscopeChatModel)
+    .defaultSystem(SYSTEM_PROMPT)
+    .defaultAdvisors(
+        new MyLoggerAdvisor(),              // 最先注册 → 最先执行
+        new MessageChatMemoryAdvisor(chatMemory)
+    )
+    .build();
+```
+
+功能特定的 Advisor（如 `QuestionAnswerAdvisor`、`loveAppRagCloudAdvisor`）在具体业务方法中通过 `.advisors()` 追加，排在 defaultAdvisors 之后。
+
+**设计原则**：横切关注点（日志、记忆）放在 defaultAdvisors，功能特定的放在方法级别的 advisors 中。
+
+---
+
+### Q6：Query Rewriting（查询重写）为什么要做？如果不做会怎么样？
+
+**考察点**：RAG 工程实践理解
+
+用户的问题往往是口语化的、简短的，直接拿去向量检索效果很差。比如：
+
+- 用户说："谈了好几年感觉没激情了怎么办"——向量检索的期望输入应该是"长期恋爱关系如何维持新鲜感"
+- 用户说："那个程序员多大"——期望输入应该是"推荐对象的年龄信息"
+
+`QueryRewriter` 的作用就是用 AI 模型把用户的自然语言问题改写得更"像搜索引擎的关键词"，提升检索召回率。
+
+如果不做查询重写：
+- 向量检索召回的相关文档变少，或者召回的文档不相关
+- 模型基于不相关的资料回答，反而比不用 RAG 效果更差
+- 这就是所谓的"Garbage in, garbage out"
+
+所以查询重写虽然不是 RAG 的必选项，但生产环境中几乎都会加。
+
+---
+
+### Q7：Spring AI 中 `.entity(LoveReport.class)` 是怎么工作的？AI 模型怎么知道要输出 JSON？
+
+**考察点**：结构化输出原理
+
+`.entity(LoveReport.class)` 背后依赖 `jsonschema-generator` 库：
+
+1. Spring AI 在启动时用该库扫描 `LoveReport.class` 的字段和类型
+2. 生成一个 JSON Schema 描述文件，描述了这个类的结构（有哪些字段、字段类型是什么、是否必填等）
+3. 把这个 JSON Schema 注入到系统 prompt 中，告诉模型"请严格按照这个 JSON 格式输出"
+4. 模型返回 JSON 字符串后，Spring AI 用 Jackson 自动反序列化成 `LoveReport` 对象
+
+关键点：模型的输出格式必须和 JSON Schema 严格匹配。如果字段名对不上，反序列化会失败。所以 `LoveReport` 的字段名要和期望的 JSON key 一致，或者用 `@JsonProperty` 显式映射。
+
+---
+
+### Q8：项目的配置为什么拆成了 `application.yml` 和 `application-local.yml` 两个文件？拆分原则是什么？
+
+**考察点**：Spring 配置管理意识
+
+拆分原则：**公共 vs 敏感，环境无关 vs 环境相关**
+
+| 文件 | 存储内容 | 是否提交 Git |
+|------|---------|------------|
+| `application.yml` | 端口、向量库配置、搜索 API key 占位、Swagger 等 | 是 |
+| `application-local.yml` | 数据库连接、阿里云 API Key 等 | 否（`.gitignore`） |
+
+这样做的实际好处：
+- **安全**：API Key、数据库密码不会因为误操作提交到 Git
+- **协作**：团队成员可以有自己的 `application-local.yml`，互不干扰
+- **多环境**：可以扩展到 `application-prod.yml`、`application-test.yml`，通过 `spring.profiles.active` 切换
+
+---
+
+### Q9：项目中 `@SpringBootApplication(exclude = PgVectorStoreAutoConfiguration.class)` 为什么要排除 pgvector 的自动配置？
+
+**考察点**：Spring Boot 自动配置冲突解决
+
+如果不排除 `PgVectorStoreAutoConfiguration`，Spring Boot 会自动创建一个名为 `pgVectorStore` 的 `PgVectorStore` Bean。同时 `PgVectorVectorStoreConfig.java` 中手动 `@Bean` 又创建了一个同名的 Bean。这就导致两个问题：
+
+1. **Bean 冲突**：两个同名 `pgVectorStore` Bean，Spring 不知道注入哪个
+2. **配置覆盖**：自动配置的默认参数可能和手动配置的不一致
+
+解决办法就是二选一——这里选择了手动创建（`PgVectorVectorStoreConfig`），因为需要精细控制 PGVector 的配置参数，所以排除自动配置。
+
+这是 Spring Boot 开发中的常见问题：当你对某个自动配置不满意、需要自定义时，就用 `exclude` 关掉它，自己手写。
+
+---
+
+### Q10：这个项目目前缺少什么？如果要上生产环境，你觉得还需要做什么？
+
+**考察点**：全局视野 + 工程经验
+
+项目目前是一个"学习型原型"，距离生产环境还有不少距离：
+
+**必须做的**：
+- **前端界面**：目前只有 API，没有用户界面（第 5-6 层的目标）
+- **认证鉴权**：没有登录、用户识别全靠前端传 chatId，生产环境至少要加 JWT/Session
+- **数据库持久化**：聊天记录在内存（重启丢），推荐数据在内存向量库，需要全部迁移到持久化存储
+- **消息队列**：长时间工具调用（如生成 PDF、搜索）会阻塞 HTTP 请求，需要用 MQ 异步化
+
+**强烈建议的**：
+- **流式响应**：目前是阻塞式等待完整回复，改成 SSE（Server-Sent Events）流式输出用户体验更好
+- **API 限流**：没有调用频率控制，恶意请求可能刷爆 API Key 余额
+- **监控告警**：没有 LLM 调用的延迟、Token 消耗、错误率监控
+- **内容安全审核**：对用户输入和 AI 输出做敏感内容过滤
+
+**可选的**：
+- 多模型切换（目前固定 DeepSeek 模型）
+- 对话历史导出
+- 用户反馈打分系统

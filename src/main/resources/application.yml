@@ -15,6 +15,15 @@ spring:
         initialize-schema: true
         max-document-batch-size: 10000
 
+    mcp:
+      client:
+        sse:
+          connections:
+            server1:
+              url: http://localhost:8127
+#        stdio:
+#          server-configuration: classpath:mcp-servers.json
+
 server:
   port: 8123
   servlet:
