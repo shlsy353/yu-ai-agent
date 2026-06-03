@@ -1,0 +1,11 @@
+spring:
+  profiles:
+    active: local
+
+  ai:
+    mcp:
+      client:
+        enabled: false
+
+search-api:
+  api-key: test-api-key

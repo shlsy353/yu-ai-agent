@@ -29,8 +29,18 @@ public class WebSearchTool {
 
             JSONObject jsonObject = JSONUtil.parseObj(response);
 
-            JSONArray organicResults = jsonObject.getJSONArray("organic_results");
-            List<Object> objects = organicResults.subList(0, 5);
+            // try multiple field names that different engines might use
+            JSONArray results = jsonObject.getJSONArray("organic_results");
+            if (results == null) results = jsonObject.getJSONArray("results");
+            if (results == null) results = jsonObject.getJSONArray("organic");
+            if (results == null) results = jsonObject.getJSONArray("items");
+            if (results == null) {
+                // log the full response for debugging and return it
+                return "搜索失败：API返回格式异常，响应内容: " + response;
+            }
+
+            int limit = Math.min(results.size(), 5);
+            List<Object> objects = results.subList(0, limit);
 
             String result = objects.stream().map(obj -> {
                 JSONObject tmpJSONObject = (JSONObject) obj;

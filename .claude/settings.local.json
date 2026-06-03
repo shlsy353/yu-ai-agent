@@ -53,7 +53,9 @@
       "Read(//c/Users/sh/.m2/repository/org/springframework/**)",
       "Read(//c/Users/sh/.m2//**)",
       "Read(//c/Users/sh/.m2/repository//**)",
-      "WebFetch(domain:mvnrepository.com)"
+      "WebFetch(domain:mvnrepository.com)",
+      "Bash(mvn test *)",
+      "Bash(JAVA_HOME=\"E:\\\\xuexi_app\\\\jdk_21\" mvn test -Dtest=\"com.tripo.yuaiagent.agent.model.YuManusTest\" -DskipTests=false)"
     ]
   }
 }
