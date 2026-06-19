@@ -11,7 +11,7 @@ import org.springframework.context.annotation.*;
 /**
  * 恋爱大师配置向量数据库
  */
-@Configuration
+ @Configuration
 public class LoveAppVectorStoreConfig {
 
     @Resource
@@ -32,7 +32,7 @@ public class LoveAppVectorStoreConfig {
         // List<Document> splitDocuments = myTokenTextSplitter.splitCustomized(documentList);
         // 自动补充关键字（学习阶段跳过，省 API 费用）
             List<Document> enrichedDocuments = documentList;
-            simpleVectorStore.add(enrichedDocuments);
+            //simpleVectorStore.add(enrichedDocuments);
             return simpleVectorStore;
 
     }

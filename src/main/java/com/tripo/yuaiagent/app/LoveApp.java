@@ -14,10 +14,11 @@ import org.springframework.ai.chat.model.*;
 import org.springframework.ai.tool.*;
 import org.springframework.ai.vectorstore.*;
 import org.springframework.stereotype.*;
+import reactor.core.publisher.*;
 
 @Component
 @Slf4j
-public class LoveApp {
+public class  LoveApp {
 
     private final ChatClient chatClient;
 
@@ -72,6 +73,26 @@ public class LoveApp {
     record LoveReport(String title, List<String> suggestions) {
     }
 
+    /**
+     * 聊天(支持多轮对话记忆，SSE流失传输)
+     *
+     * @param message
+     * @param chatId
+     * @return
+     */
+    public Flux<String> doChatByStream(String message, String chatId) {
+        return chatClient
+                .prompt()
+                .user(message)
+                .advisors(spec -> spec
+                        // 绑定会话ID，实现多用户隔离
+                        .param(ChatMemory.CONVERSATION_ID, chatId)
+                        // 动态指定本次请求读取最近10条历史
+                        .param("chat_memory_retrieve_size", 10)
+                )
+                .stream()
+                .content();
+    }
     /**
      * AI 恋爱报告功能
      *

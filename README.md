@@ -1,10 +1,10 @@
-# 项目结构完整解析
-# 本项目为学习项目，在老师原有的项目上进行修改，并添加了 RAG 模型、工具调用（Function Calling）等功能，并完善了代码注释。
+# Yu AI Agent — AI 智能对话助手
 
-> **项目名称**：yu-ai-agent（AI 恋爱顾问）
-> **技术栈**：Spring Boot 3.5.14 + Spring AI 1.1.x + 阿里云百炼 DashScope
+> 本项目为学习项目，在老师原有的项目基础上进行修改，并添加了 RAG 模型、工具调用（Function Calling）、AI Agent 体系、前端页面等功能。
+>
+> **技术栈**：Spring Boot 3.5.14 + Spring AI 1.1.x + Vue 3 + Vite + 阿里云百炼 DashScope
 > **底层模型**：DeepSeek-v4-flash（阿里云百炼部署）
-> **构建工具**：Maven + JDK 21
+> **构建工具**：Maven + JDK 21 / npm + Vite
 > **数据库**：PostgreSQL + PGVector（向量检索）
 > **文档**：Swagger (Knife4j) — http://localhost:8123/api/swagger-ui.html
 
@@ -13,88 +13,177 @@
 ## 目录
 
 1. [项目全景图](#一项目全景图)
-2. [文件结构速览](#二文件结构速览)
-3. [核心业务流程详解](#三核心业务流程详解)
-4. [工具调用系统（Function Calling）](#四工具调用系统function-calling)
-5. [RAG 管线全解析](#五rag-管线全解析)
-6. [三套向量数据库对比](#六三套向量数据库对比)
-7. [Advisor 拦截器链](#七advisor-拦截器链)
-8. [聊天记忆机制](#八聊天记忆机制)
-9. [配置体系](#九配置体系)
-10. [学习路线：从裸调到业务](#十学习路线从裸调到业务)
-11. [关键概念速查](#十一关键概念速查)
-12. [常见问题 FAQ](#十二常见问题-faq)
+2. [快速启动](#二快速启动)
+3. [项目结构](#三项目结构)
+4. [前端页面介绍](#四前端页面介绍)
+5. [后端核心模块](#五后端核心模块)
+6. [AI Agent 体系（ReAct 模式）](#六ai-agent-体系react-模式)
+7. [工具调用系统（Function Calling）](#七工具调用系统function-calling)
+8. [RAG 管线全解析](#八rag-管线全解析)
+9. [三套向量数据库对比](#九三套向量数据库对比)
+10. [Advisor 拦截器链](#十advisor-拦截器链)
+11. [配置体系](#十一配置体系)
+12. [API 接口一览](#十二api-接口一览)
+13. [面试常见问题](#十三面试常见问题)
+14. [常见问题 FAQ](#十四常见问题-faq)
 
 ---
 
 ## 一、项目全景图
 
 ```
-┌──────────────────────────────────────────────────────────────────────────┐
-│                         LoveApp (业务入口)                                │
-│  @Component                                                              │
-│  ┌──────────┐  ┌──────────────┐  ┌──────────┐  ┌──────────┐  ┌────────┐ │
-│  │ doChat() │  │doChatWith    │  │doChatWith│  │recommend │  │doChat  │ │
-│  │ 普通聊天 │  │Report()      │  │Rag()     │  │Partner() │  │With    │ │
-│  │          │  │ 恋爱报告     │  │ 知识库   │  │ 推荐对象 │  │Tools() │ │
-│  └────┬─────┘  └──────┬───────┘  └────┬────┘  └────┬─────┘  │ 工具调用 │
-│       │               │               │           │         └────┬────┘ │
-│       └────────┬──────┴───────┬───────┴───────────┘              │      │
-│                │              │                                  │      │
-│       ┌────────▼──────────────▼──────────────────────────┐       │      │
-│       │              ChatClient (核心聊天客户端)            │       │      │
-│       │  builder(dashscopeChatModel)                      │       │      │
-│       │  .defaultSystem("恋爱顾问提示词")                   │       │      │
-│       │  .defaultAdvisors(MyL oggerAdvisor,                │       │      │
-│       │                MessageChatMemoryAdvisor)          │       │      │
-│       └────────────────────┬─────────────────────────────┘       │      │
-│                            │                                      │      │
-└────────────────────────────┼──────────────────────────────────────┼──────┘
-                             │                                      │
-                             ▼                                      ▼
-                    ┌──────────────────┐              ┌──────────────────────┐
-                    │  DashScope API    │              │  6 个 Tool 工具      │
-                    │  (DeepSeek 模型)   │              │  联网搜索 / 网页抓取  │
-                    └──────────────────┘              │  文件读写 / 下载      │
-                                                      │  PDF生成 / 终端命令   │
-                                                      └──────────────────────┘
-
-    ┌────────────────── 三条外部数据通道 ──────────────────┐
-    │                                                      │
-    ▼                                                      ▼
-┌─────────────────┐  ┌──────────────────────┐  ┌──────────────────┐
-│ SimpleVectorStore│  │DashScopeDocument      │  │ PgVectorStore     │
-│ (内存向量库)     │  │Retriever             │  │ (PostgreSQL持久化) │
-│                 │  │ (阿里云知识库)        │  │                   │
-│ recommendPartner│  │ doChatWithRag         │  │ 测试中, 未接入    │
-│ 专用            │  │ 专用                 │  │ 业务              │
-└───────┬─────────┘  └──────────────────────┘  └──────────────────┘
-        │
-        │  启动时加载
-        ▼
-┌──────────────────────────────────────────┐
-│  document/*.md (4 个 Markdown 知识文件)   │
-│   → LoveAppDocumentLoader 读取           │
-│   → MyKeywordEnricher 自动加关键词       │
-│   → 存入 SimpleVectorStore              │
-└──────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                              前端 (Vue 3 + Vite)                              │
+│  ┌─────────────────┐    ┌─────────────────────┐    ┌─────────────────────┐    │
+│  │   Home.vue       │    │   LoveMaster.vue     │    │   Manus.vue          │    │
+│  │   首页，选择应用   │    │   AI 恋爱大师         │    │   AI 超级智能体       │    │
+│  └────────┬────────┘    └──────────┬──────────┘    └──────────┬──────────┘    │
+│           │                        │                          │               │
+│           └────────────────────────┼──────────────────────────┘               │
+│                                    │                                          │
+│                          SSE 流式通信 (fetch + ReadableStream)                 │
+└────────────────────────────────────┼──────────────────────────────────────────┘
+                                     │
+                                     ▼
+┌────────────────────────────────────┼──────────────────────────────────────────┐
+│                              后端 (Spring Boot)                                │
+│                                    │                                          │
+│  ┌─────────────────────────────────▼──────────────────────────────────────┐  │
+│  │                      AiContronller (REST API)                           │  │
+│  │  /api/love_app/chat/sse        → 恋爱大师 SSE 流式                       │  │
+│  │  /api/love_app/chat/sync       → 恋爱大师 同步                           │  │
+│  │  /api/manus/chat               → 超级智能体 SSE 流式                     │  │
+│  └─────────────────────────────────┬──────────────────────────────────────┘  │
+│                                    │                                          │
+│               ┌────────────────────┼────────────────────┐                     │
+│               ▼                    ▼                    ▼                     │
+│  ┌────────────────────┐  ┌──────────────────┐  ┌──────────────────────┐      │
+│  │     LoveApp        │  │   YuManus        │  │   6 个 Tool 工具      │      │
+│  │  doChat()          │  │  (Agent)         │  │  联网搜索 / 网页抓取   │      │
+│  │  doChatWithReport()│  │  ReAct 循环       │  │  文件读写 / 下载      │      │
+│  │  doChatWithRag()   │  │  think → act     │  │  PDF生成 / 终端命令   │      │
+│  │  recommendPartner()│  │  → 循环          │  │                      │      │
+│  │  doChatWithTools() │  │                  │  │                      │      │
+│  │  doChatByStream()  │  │                  │  │                      │      │
+│  └─────────┬──────────┘  └────────┬─────────┘  └──────────┬───────────┘      │
+│            │                      │                        │                  │
+│            ▼                      ▼                        │                  │
+│  ┌─────────────────────────────────────────────────────────┴──────────┐       │
+│  │                        ChatClient (核心聊天客户端)                     │       │
+│  │  builder(dashscopeChatModel)                                         │       │
+│  │  .defaultSystem("恋爱顾问提示词")                                      │       │
+│  │  .defaultAdvisors(MyLoggerAdvisor, MessageChatMemoryAdvisor)         │       │
+│  └────────────────────────────────┬────────────────────────────────────┘       │
+│                                   │                                            │
+│                                   ▼                                            │
+│                         ┌──────────────────┐                                   │
+│                         │  DashScope API    │                                   │
+│                         │  (DeepSeek 模型)   │                                   │
+│                         └──────────────────┘                                   │
+│                                                                                │
+│    ┌─────────────────── 三条外部数据通道 ────────────────────┐                  │
+│    │                                                        │                  │
+│    ▼                                                        ▼                  │
+│  ┌─────────────────┐  ┌──────────────────────┐  ┌──────────────────┐          │
+│  │SimpleVectorStore│  │DashScopeDocument      │  │ PgVectorStore     │          │
+│  │(内存向量库)      │  │Retriever             │  │(PostgreSQL持久化)  │          │
+│  │recommendPartner │  │(阿里云知识库)          │  │测试中，未接入业务   │          │
+│  │专用             │  │doChatWithRag 专用     │  │                   │          │
+│  └───────┬─────────┘  └──────────────────────┘  └──────────────────┘          │
+│          │                                                                     │
+│          │  启动时加载                                                          │
+│          ▼                                                                     │
+│  ┌──────────────────────────────────────────┐                                  │
+│  │  document/*.md (4 个 Markdown 知识文件)    │                                  │
+│  │  → LoveAppDocumentLoader 读取             │                                  │
+│  │  → MyKeywordEnricher 自动加关键词          │                                  │
+│  │  → 存入 SimpleVectorStore                 │                                  │
+│  └──────────────────────────────────────────┘                                  │
+└────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 二、文件结构速览
+## 二、快速启动
+
+### 环境要求
+
+| 组件 | 版本要求 |
+|------|---------|
+| JDK | 21+ |
+| Maven | 3.6+ |
+| Node.js | 18+ |
+| PostgreSQL | 15+（可选，PGVector 需要） |
+
+### 1. 配置 API Key
+
+编辑 `src/main/resources/application-local.yml`：
+
+```yaml
+spring:
+  ai:
+    dashscope:
+      api-key: sk-xxx          # 阿里云百炼 API Key（必填）
+  datasource:
+    url: jdbc:postgresql://localhost:5432/yu_ai_agent
+    username: postgres
+    password: root
+
+search-api:
+  api-key: xxx                  # searchapi.io API Key（超级智能体联网搜索需要）
+```
+
+### 2. 启动后端
+
+```bash
+# PowerShell
+$env:JAVA_HOME="E:\xuexi_app\jdk_21"
+$env:PATH="$env:JAVA_HOME\bin;$env:PATH"
+mvn spring-boot:run
+```
+
+后端启动后访问 http://localhost:8123/api/healthy 验证。
+
+### 3. 启动前端
+
+```bash
+cd yu-ai-agent-frontend
+npm install
+npm run dev
+```
+
+前端启动后访问 http://localhost:3000。
+
+### 4. 访问页面
+
+| 页面 | 地址 | 说明 |
+|------|------|------|
+| 首页 | http://localhost:3000 | 选择 AI 应用 |
+| AI 恋爱大师 | http://localhost:3000/#/love-master | 恋爱顾问对话 |
+| AI 超级智能体 | http://localhost:3000/#/manus | Agent 工具调用对话 |
+
+---
+
+## 三、项目结构
 
 ```
 yu-ai-agent/
-├── pom.xml                                          # 依赖总控
+├── pom.xml                                          # Maven 依赖总控
 │
 ├── src/main/java/com/tripo/yuaiagent/
 │   ├── YuAiAgentApplication.java                    # ★ 启动类
 │   │
 │   ├── app/
-│   │   └── LoveApp.java                             # ★★★ 核心业务 (5个功能)
+│   │   └── LoveApp.java                             # ★★★ 核心业务（6 个功能）
 │   │
-│   ├── tools/                                       # ★★ 工具调用（新增）
+│   ├── agent/model/                                 # ★★ AI Agent 体系（新增）
+│   │   ├── AgentState.java                          #   Agent 状态枚举（IDLE→RUNNING→FINISHED/ERROR）
+│   │   ├── BaseAgent.java                           #   Agent 基类，状态管理 + 流式执行
+│   │   ├── ReActAgent.java                          #   ReAct 模式：think → act 循环
+│   │   ├── ToolCallAgent.java                       #   工具调用 Agent，think 生成 + act 执行
+│   │   └── YuManus.java                             #   超级智能体，配置提示词和工具
+│   │
+│   ├── tools/                                       # ★★ 工具调用
 │   │   ├── ToolRegistration.java                    #   工具注册中心（@Configuration）
 │   │   ├── WebSearchTool.java                       #   百度联网搜索
 │   │   ├── WebScrapingTool.java                     #   网页内容抓取
@@ -105,7 +194,7 @@ yu-ai-agent/
 │   │
 │   ├── rag/                                         # ★★ RAG 相关组件
 │   │   ├── LoveAppDocumentLoader.java               #   加载 markdown 文档
-│   │   ├── MyTokenTextSplitter.java                 #   文本分割器 (分词)
+│   │   ├── MyTokenTextSplitter.java                 #   文本分割器（分词）
 │   │   ├── MyKeywordEnricher.java                   #   AI 自动提取关键词
 │   │   ├── QueryRewriter.java                       #   查询重写器
 │   │   ├── LoveAppVectorStoreConfig.java            #   SimpleVectorStore 配置
@@ -123,228 +212,239 @@ yu-ai-agent/
 │   │   └── FileConstant.java                        # ★ 文件保存路径常量
 │   │
 │   ├── controller/
-│   │   └── HealthyController.java                   #   GET /api/healthy
+│   │   ├── HealthyController.java                   #   GET /api/healthy
+│   │   └── AiContronller.java                       #   AI 对话接口
 │   │
 │   └── demo/invoke/                                 # 四个逐步进阶的调用示例
-│       ├── HttpAiInvoke.java                        #   HTTP 裸调 (Hutool)
+│       ├── HttpAiInvoke.java                        #   HTTP 裸调（Hutool）
 │       ├── SdkAiInvoke.java                         #   DashScope SDK 调用
 │       ├── SpringAiInvoke.java                      #   Spring AI ChatModel
 │       └── TestApiKey.java                          #   API Key 定义
 │
 ├── src/main/resources/
-│   ├── application.yml                              # 主配置 (pgvector, 端口, Swagger)
-│   ├── application-local.yml                        # 本地配置 (DB, API Key)
+│   ├── application.yml                              # 主配置（pgvector、端口、Swagger）
+│   ├── application-local.yml                        # 本地配置（DB、API Key）
 │   └── document/                                    # ★ 知识库原始数据
 │       ├── 恋爱常见问题和回答 - 恋爱篇.md
 │       ├── 恋爱常见问题和回答 - 单身篇.md
 │       ├── 恋爱常见问题和回答 - 已婚篇.md
 │       └── 恋爱对象库.md
 │
-└── src/test/java/com/tripo/yuaiagent/
-    ├── app/LoveAppTest.java                         # ★ 集成测试 (5个测试方法)
-    ├── tools/                                       # ★★ 工具单元测试（新增）
-    │   ├── WebSearchToolTest.java
-    │   ├── WebScrapingToolTest.java
-    │   ├── FileOperationToolTest.java
-    │   ├── ResourceDownloadToolTest.java
-    │   ├── PDFGenerationToolTest.java
-    │   └── TerminalOperationToolTest.java
-    ├── rag/LoveAppDocumentLoaderTest.java           # 文档加载测试
-    └── rag/PgVectorVectorStoreConfigTest.java       # PGVector 测试
+├── src/test/java/com/tripo/yuaiagent/
+│   ├── app/LoveAppTest.java                         # ★ 集成测试
+│   ├── tools/                                       # ★★ 工具单元测试
+│   │   ├── WebSearchToolTest.java
+│   │   ├── WebScrapingToolTest.java
+│   │   ├── FileOperationToolTest.java
+│   │   ├── ResourceDownloadToolTest.java
+│   │   ├── PDFGenerationToolTest.java
+│   │   └── TerminalOperationToolTest.java
+│   ├── rag/LoveAppDocumentLoaderTest.java
+│   └── rag/PgVectorVectorStoreConfigTest.java
+│
+└── yu-ai-agent-frontend/                            # ★★★ 前端项目
+    ├── package.json                                 #   依赖：Vue 3、Vite、Vue Router、Axios
+    ├── vite.config.js                               #   Vite 配置（端口 3000）
+    ├── index.html                                   #   入口 HTML
+    ├── dist/                                        #   构建产物
+    └── src/
+        ├── main.js                                  #   Vue 入口
+        ├── App.vue                                  #   根组件
+        ├── api/
+        │   ├── index.js                             #   Axios 实例（baseURL: /api）
+        │   └── ai.js                                #   AI 接口封装（SSE 流式）
+        ├── router/
+        │   └── index.js                             #   路由配置（3 个页面）
+        └── views/
+            ├── Home.vue                             #   首页：选择 AI 应用
+            ├── LoveMaster.vue                       #   AI 恋爱大师对话页
+            └── Manus.vue                            #   AI 超级智能体对话页
 ```
 
 ---
 
-## 三、核心业务流程详解
+## 四、前端页面介绍
 
-### 流程 1：doChat() —— 带记忆的普通聊天
+### 前端技术栈
+
+| 技术 | 用途 |
+|------|------|
+| Vue 3 | 前端框架（Composition API） |
+| Vite | 构建工具，开发服务器 |
+| Vue Router | 路由管理 |
+| Axios | HTTP 请求库（主要用于 baseURL 配置） |
+| Fetch API + ReadableStream | SSE 流式接收 |
+
+### 页面说明
+
+#### 首页（Home.vue）
+
+- 路由：`/`
+- 展示两个应用卡片，点击进入对应页面
+- 卡片 1：AI 智能恋爱大师 → `/love-master`
+- 卡片 2：AI 超级智能体 → `/manus`
+
+#### AI 恋爱大师（LoveMaster.vue）
+
+- 路由：`/love-master`
+- 调用接口：`GET /api/ai/love_app/chat/sse`（SSE 流式）
+- 功能：恋爱顾问对话，基于知识库 + 提示词回答情感问题
+- 特点：每次对话自动生成 chatId，流式输出，打字机效果
+
+#### AI 超级智能体（Manus.vue）
+
+- 路由：`/manus`
+- 调用接口：`GET /api/ai/manus/chat`（SSE 流式）
+- 功能：基于 ReAct 模式的 Agent，可自动调用工具（搜索、抓取网页等）
+- 特点：显示处理进度（"正在处理... 步骤 2/20"），最终只展示 AI 整理好的回答
+
+### SSE 通信流程
 
 ```
-你: "我叫小王"
+前端（LoveMaster.vue / Manus.vue）
   │
-  ▼
-LoveApp.doChat("我叫小王", chatId)
+  ├─ sendMessage() → 调用 ai.js 中的方法
   │
-  │    
+  ├─ ai.js: fetch(url, headers: { Accept: 'text/event-stream' })
+  │   用原生 fetch + ReadableStream 读取 SSE 数据
   │
-  ├─ [Advisor 1] MyLoggerAdvisor.before()
-  │   打印: request = ...
+  ├─ 后端返回 SseEmitter，逐条 send(data)
   │
-  ├─ [Advisor 2] MessageChatMemoryAdvisor
-  │   从内存中读取 chatId 对应的最近 10 条历史消息
-  │   把历史消息注入到 prompt 的 SystemMessage 里
-  │
-  ├─ [API] ChatModel.call(prompt)
-  │   请求阿里云百炼 → DeepSeek 模型
-  │   模型看到: "历史消息: ... \n 用户: 我叫小王"
-  │
-  ├─ [Advisor 2] MessageChatMemoryAdvisor
-  │   把这次对话保存到内存
-  │
-  ├─ [Advisor 1] MyLoggerAdvisor.after()
-  │   打印: response = ...
-  │
-  └─ 返回: "你好小王！我是你的恋爱顾问..."
+  └─ 前端逐条解析 data: 开头的行，调用 onData 回调
+       → 恋爱大师：直接拼接显示
+       → 超级智能体：区分 [STATUS] 进度 和 [RESULT] 最终结果
 ```
-
-**关键点**：
-- `MessageChatMemoryAdvisor` 是 Spring AI 内置的，不是自己写的
-- 聊天记录存在**内存**里，重启就没了
-- `chatId` 用来区分不同用户，实现多用户隔离
 
 ---
 
-### 流程 2：doChatWithReport() —— 生成结构化报告
+## 五、后端核心模块
+
+### 1. LoveApp — 恋爱大师业务类
+
+位于 `app/LoveApp.java`，是整个项目的核心业务类，提供 6 个功能方法：
+
+| 方法 | 功能 | 使用的 Advisor |
+|------|------|---------------|
+| `doChat(message, chatId)` | 普通聊天，带记忆 | MyLoggerAdvisor + MessageChatMemoryAdvisor |
+| `doChatWithReport(message, chatId)` | 生成结构化恋爱报告（JSON） | MyLoggerAdvisor + MessageChatMemoryAdvisor |
+| `doChatWithRag(message, chatId)` | 基于阿里云知识库问答 | 加上 loveAppRagCloudAdvisor |
+| `recommendPartner(message)` | 基于向量库推荐恋爱对象 | 加上 QuestionAnswerAdvisor |
+| `doChatWithTools(message, chatId)` | 普通聊天 + 工具调用 | 加上工具列表 |
+| `doChatByStream(message, chatId)` | 流式聊天（SSE） | 返回 Flux\<String\> |
+
+### 2. 控制器层
+
+位于 `controller/AiContronller.java`：
 
 ```java
-public LoveReport doChatWithReport(String message, String chatId) {
-    LoveReport loveReport = chatClient.prompt()
-        .system(SYSTEM_PROMPT + "只返回 JSON 格式数据...")
-        .user(message)
-        .call()
-        .entity(LoveReport.class);    // ← 自动解析 JSON 成 Java 对象
-    return loveReport;
+@RestController
+@RequestMapping("/ai")
+public class AiContronller {
+
+    @GetMapping("/love_app/chat/sync")   // 同步调用
+    @GetMapping("/love_app/chat/sse")    // SSE 流式（恋爱大师）
+    @GetMapping("/manus/chat")           // SSE 流式（超级智能体）
 }
 ```
 
-**关键点**：
-- `.entity(LoveReport.class)` 让 Spring AI 自动把模型的 JSON 输出转成 Java 对象
-- `jsonschema-generator` 依赖就是干这个的——它把 `LoveReport` 的结构告诉模型，让模型按格式输出
+### 3. 学习路线：从裸调到业务
+
+```
+第 1 层：HttpAiInvoke                    HTTP + Hutool 手写请求
+  │      "原来调用 AI 就是在发 HTTP 请求"
+  ▼
+第 2 层：SdkAiInvoke                     DashScope SDK 封装
+  │      "SDK 帮我处理了 HTTP 细节"
+  ▼
+第 3 层：SpringAiInvoke                  Spring AI 的 ChatModel
+  │      "Spring AI 统一了不同厂商的接口"
+  ▼
+第 4 层：LoveApp                          ChatClient 编排业务流程
+  │      "加记忆、加 RAG、加工具调用"
+  ▼
+第 5 层：REST 接口 + Vue 前端             @RestController 暴露 HTTP 接口
+         "完整的 Web 应用"
+```
 
 ---
 
-### 流程 3：doChatWithRag() —— 基于知识库问答 ★★★
+## 六、AI Agent 体系（ReAct 模式）
+
+### 什么是 Agent？
+
+Agent = 能自主决策、调用工具、完成复杂任务的 AI 系统。和普通对话的区别：
+
+| 普通对话 | Agent |
+|---------|-------|
+| 一问一答，单次调用 LLM | 多步循环，多次调用 LLM |
+| 只能"说" | 能"做"（调用工具） |
+| 固定流程 | 自主决策调用什么工具 |
+
+### Agent 类继承关系
 
 ```
-你: "婚后关系不太亲密怎么办？"
+BaseAgent（基类）
+  ├─ 状态管理：IDLE → RUNNING → FINISHED/ERROR
+  ├─ runStream()：流式执行入口
+  │
+  └─ ReActAgent（ReAct 模式）
+       ├─ step()：think() → act() 循环
+       │
+       └─ ToolCallAgent（工具调用）
+            ├─ think()：调用 LLM，判断是否需要工具
+            ├─ act()：执行工具调用
+            │
+            └─ YuManus（超级智能体）
+                 配置提示词、工具、最大步数
+```
+
+### ReAct 循环详解
+
+```
+用户: "北京明天天气怎么样？"
   │
   ▼
-LoveApp.doChatWithRag("婚后关系不太亲密怎么办？", chatId)
-  │
-  ├─ 第 1 步：查询重写
-  │   queryRewriter.doQueryRewrite("婚后关系不太亲密怎么办？")
-  │   → 用 AI 把用户问题改写得更容易检索
-  │   → 返回: "婚后如何改善夫妻关系？如何增进亲密感？"
-  │
-  ├─ 第 2 步：用重写后的查询调用 ChatClient
-  │   chatClient.prompt().user("婚后如何改善夫妻关系？...")
-  │
-  ├─ [Advisor 1] MyLoggerAdvisor            ← 日志
-  │
-  ├─ [Advisor 2] MessageChatMemoryAdvisor   ← 历史记忆
-  │
-  ├─ [Advisor 3] loveAppRagCloudAdvisor     ← ★ RAG 核心！
-  │   │
-  │   ├─ DashScopeDocumentRetriever.retrieve()
-  │   │   → 去阿里云百炼上的"恋爱大师"知识库搜索相关文档
-  │   │   → 返回相关片段
-  │   │
-  │   └─ RetrievalAugmentationAdvisor
-  │       → 把搜索到的片段拼接到 prompt 里
-  │       → "基于以下资料回答问题：\n[资料1]...\n[资料2]..."
-  │
-  ├─ [API] ChatModel.call(prompt)
-  │   模型看到: "资料:... 问题:婚后如何改善..."
-  │
-  └─ 返回: "婚后关系冷淡是常见问题，建议你们..."
-```
-
-**为什么叫 RAG（检索增强生成）？**
-> 不 RAG：模型只凭自己的训练数据回答 → 容易胡编乱造（幻觉）
-> RAG：先查资料，再让模型基于查到的资料回答 → 答案更准确、可追溯
-
----
-
-### 流程 4：recommendPartner() —— 基于向量库推荐
-
-```
-你: "请你给我推荐一个25岁的程序员，我不考虑星座"
+Step 1: think() → 调用 LLM → "我需要搜索北京天气" → 返回 true（需要工具）
+Step 2: act()  → 调用 searchWeb("北京天气")
+Step 3: think() → 调用 LLM → "我需要抓取天气网页内容" → 返回 true
+Step 4: act()  → 调用 scrapeWebPage(url)
+Step 5: think() → 调用 LLM → "数据拿到了，我整理一下回答... 调用 terminate" → 返回 true
+Step 6: act()  → 执行 doTerminate
   │
   ▼
-LoveApp.recommendPartner("请你给我推荐一个25岁的程序员...")
-  │
-  ├─ [Advisor 1] MyLoggerAdvisor
-  │
-  ├─ [Advisor 2] QuestionAnswerAdvisor
-  │   │
-  │   ├─ loveAppVectorStore.similaritySearch("25岁程序员")
-  │   │   → 把用户问题转成向量（1024 个小数）
-  │   │   → 在向量库里找最相似的 4 个文档
-  │   │   → 返回 "张三：25岁程序员，单身，喜欢..."
-  │   │
-  │   └─ 把查到的资料注入 prompt
-  │
-  ├─ [API] ChatModel.call(prompt)
-  │   模型看到: "资料:张三:25岁程序员... 问题:推荐25岁程序员"
-  │
-  └─ 返回: "我为你推荐张三，他25岁..."
+最终输出: "北京明天多云，气温 15℃~26℃..."
+```
+
+### Agent 状态机
+
+```
+IDLE ──→ RUNNING ──→ FINISHED（正常结束）
+                    ├─→ ERROR（异常结束）
+```
+
+### 前端进度显示
+
+后端在每一步循环前发送 `[STATUS]` 进度提示，循环结束后发送 `[RESULT]` 最终结果：
+
+```javascript
+// Manus.vue 中处理
+onData(data) {
+  if (data.startsWith('[STATUS]')) {
+    statusText.value = data.slice(8)   // 显示 "正在处理... (步骤 2/20)"
+  }
+  if (data.startsWith('[RESULT]')) {
+    aiContent = data.slice(8)           // 最终 AI 回答
+  }
+}
 ```
 
 ---
 
-### 流程 5：doChatWithTools() —— 工具调用（Function Calling）★★★
-
-```
-你: "周末想去上海约会，推荐小众打卡地"
-  │
-  ▼
-LoveApp.doChatWithTools("周末想带女朋友去上海约会...", chatId)
-  │
-  ├─ 第 1 步：AI 决定要调用什么工具
-  │   DeepSeek 模型分析用户意图
-  │   → "用户想去上海约会，需要查找小众打卡地"
-  │   → 决定调用 WebSearchTool.searchWeb("上海小众约会打卡地推荐")
-  │
-  ├─ 第 2 步：执行工具
-  │   框架自动调用对应的 Java 方法
-  │   → WebSearchTool.searchWeb("上海小众约会打卡地推荐")
-  │   → 发起 HTTP 请求到 searchapi.io，搜索百度
-  │   → 返回搜索结果（JSON 格式）
-  │
-  ├─ 第 3 步：工具结果返回给 AI
-  │   模型看到: "搜索结果：田子坊、1933老场坊..."
-  │   → 模型根据搜索结果生成自然语言回复
-  │
-  └─ 返回: "推荐上海几个小众约会圣地：1. 田子坊..."
-
----
-
-更复杂的工具调用链路（多个工具协同）：
-
-```
-你: "下载一张星空情侣壁纸，保存到本地"
-  │
-  ├─ AI 分析: 需要"下载图片"
-  │   → 先调用 WebSearchTool.searchWeb("星空情侣壁纸")
-  │   → 搜索结果里有图片 URL
-  │
-  ├─ AI 再决定: 需要"保存图片到本地"
-  │   → 调用 ResourceDownloadTool.downloadResource(url, "星空壁纸.jpg")
-  │   → 文件保存到 ./tmp/download/星空壁纸.jpg
-  │
-  └─ 返回: "已经下载好了，保存在 ./tmp/download/ 目录下"
-
----
-
-你: "生成一份七夕约会计划 PDF"
-  │
-  ├─ AI 分析: 需要"生成 PDF 文件"
-  │   → 先自己构思内容（餐厅预订、活动流程、礼物清单...）
-  │   → 调用 PDFGenerationTool.generatePDF("七夕约会计划.pdf", content)
-  │   → PDF 保存到 ./tmp/pdf/七夕约会计划.pdf
-  │
-  └─ 返回: "已经生成好了，内容包含..." + PDF 下载路径
-```
-
-**工具调用的本质**：AI 模型自己决定"我现在需要执行哪个函数来获取信息或完成操作"，而不是人写死的固定流程。
-
----
-
-## 四、工具调用系统（Function Calling）
+## 七、工具调用系统（Function Calling）
 
 ### 什么是 Function Calling？
 
-Function Calling（函数调用）让 AI 模型能主动调用外部工具：
+让 AI 模型能主动调用外部工具的能力：
 
 ```
 传统 Chat：用户 → AI（只能动嘴说）
@@ -353,26 +453,20 @@ Function Calling（函数调用）让 AI 模型能主动调用外部工具：
 
 ### 6 个注册工具一览
 
-所有工具在 `ToolRegistration.java` 中统一注册为 `ToolCallback[]` Bean，然后注入到 `LoveApp`。
-
 | 工具 | 类名 | @Tool 方法 | 能力 | 依赖 |
 |------|------|-----------|------|------|
 | **联网搜索** | `WebSearchTool` | `searchWeb(query)` | 通过 searchapi.io 调用百度搜索 | searchapi.io API Key |
 | **网页抓取** | `WebScrapingTool` | `scrapeWebPage(url)` | 爬取指定 URL 的 HTML 内容 | Jsoup |
-| **文件读写** | `FileOperationTool` | `readFile(fileName)` / `writeFile(fileName, content)` | 读取/写入文件到 `./tmp/file/` | Hutool |
-| **资源下载** | `ResourceDownloadTool` | `downloadResource(url, fileName)` | 下载网络资源到 `./tmp/download/` | Hutool |
-| **PDF 生成** | `PDFGenerationTool` | `generatePDF(fileName, content)` | 生成 PDF 文件到 `./tmp/pdf/` | iText |
-| **终端命令** | `TerminalOperationTool` | `executeTerminalCommand(command)` | 执行 cmd.exe 命令 | 无 |
+| **文件读写** | `FileOperationTool` | `readFile()` / `writeFile()` | 读取/写入文件到 `./tmp/file/` | Hutool |
+| **资源下载** | `ResourceDownloadTool` | `downloadResource()` | 下载网络资源到 `./tmp/download/` | Hutool |
+| **PDF 生成** | `PDFGenerationTool` | `generatePDF()` | 生成 PDF 文件到 `./tmp/pdf/` | iText |
+| **终端命令** | `TerminalOperationTool` | `executeTerminalCommand()` | 执行 cmd.exe 命令 | 无 |
 
 ### 工具注册机制
 
 ```java
 @Configuration
 public class ToolRegistration {
-
-    @Value("${search-api.api-key}")
-    private String searchApiKey;
-
     @Bean
     public ToolCallback[] allTools() {
         return ToolCallbacks.from(
@@ -387,21 +481,7 @@ public class ToolRegistration {
 }
 ```
 
-**关键点**：Spring AI 中工具注册有两种方式：
-- `tools(Object...)` — 传入普通对象，框架自动扫描 @Tool 注解（用于构建时）
-- `toolCallbacks(ToolCallback...)` — 传入已经构建好的 ToolCallback 实例（用于调用时）
-
-`LoveApp.doChatWithTools()` 中调用 `.toolCallbacks(allTools)`，因为 `allTools` 已经是 `ToolCallback[]`。
-
 ### 文件保存目录
-
-所有文件操作（读写、下载、PDF）统一保存在：
-
-```java
-FileConstant.File_SAVE_DIR = System.getProperty("user.dir") + "/tmp"
-```
-
-即项目根目录下的 `tmp/` 文件夹，按工具类型分子目录：
 
 ```
 项目根目录/
@@ -413,173 +493,76 @@ FileConstant.File_SAVE_DIR = System.getProperty("user.dir") + "/tmp"
 
 ---
 
-## 五、RAG 管线全解析
+## 八、RAG 管线全解析
 
 ### 什么是 RAG？
 
 RAG = Retrieval-Augmented Generation = **检索增强生成**
 
 ```
-传统 AI 对话：
-  用户问 → 模型凭记忆回答 → 可能胡说八道
-                            ↑
-                      这叫"幻觉"（hallucination）
-
-RAG 对话：
-  用户问 → 先去知识库查资料 → 把资料+问题一起给模型 → 模型基于资料回答
-                                                      ↑
-                                            答案有据可查，不易胡说
+不 RAG：用户问 → 模型凭记忆回答 → 可能胡说八道（幻觉）
+RAG：   用户问 → 先查知识库 → 把资料+问题给模型 → 基于资料回答（有据可查）
 ```
 
-### 本项目中的 RAG 管线组件
+### RAG 管线组件
 
-| 组件 | 类名 | 作用 | 类比 |
-|------|------|------|------|
-| **文档加载** | `LoveAppDocumentLoader` | 从 `document/*.md` 读取原始文本 | 去图书馆借书 |
-| **文本分割** | `MyTokenTextSplitter` | 把长文档切成小块（token 级别） | 把书拆成章节 |
-| **关键词增强** | `MyKeywordEnricher` | AI 自动给每段加关键词标签 | 给章节贴标签 |
-| **查询重写** | `QueryRewriter` | 把用户问题改写得更利于搜索 | "我想要..." → "推荐条件:..." |
-| **向量检索** | `VectorStore` | 把问题和文档都转成向量，找最相似的 | 在图书馆按主题找书 |
-| **结果注入** | `Advisor` | 把查到的资料塞进 prompt 给模型 | 把书放在桌上让 AI 参考 |
+| 组件 | 类名 | 作用 |
+|------|------|------|
+| 文档加载 | `LoveAppDocumentLoader` | 从 `document/*.md` 读取原始文本 |
+| 文本分割 | `MyTokenTextSplitter` | 把长文档切成小块（token 级别） |
+| 关键词增强 | `MyKeywordEnricher` | AI 自动给每段加关键词标签 |
+| 查询重写 | `QueryRewriter` | 把用户口语化问题改写得更利于检索 |
+| 向量检索 | `VectorStore` | 把问题和文档都转成向量，找最相似的 |
+| 结果注入 | `Advisor` | 把查到的资料塞进 prompt 给模型 |
 
-### 完整的 RAG 链路
+### 完整 RAG 链路
 
 ```
-                      ┌─────────────┐
-                      │  用户提问    │
-                      └──────┬──────┘
-                             │
-                             ▼
-                      ┌─────────────┐
-                      │ 查询重写     │ ← QueryRewriter
-                      │ "改善关系" → │   用 AI 改写问题
-                      │ "婚后亲密技巧"│
-                      └──────┬──────┘
-                             │
-                             ▼
-                      ┌─────────────┐
-                      │  向量检索    │ ← VectorStore
-                      │ 找最相似文档  │   把问题变成向量去匹配
-                      └──────┬──────┘
-                             │
-                    ┌────────┴────────┐
-                    │                 │
-                    ▼                 ▼
-             ┌────────────┐   ┌────────────┐
-             │ 原始文档     │   │ 重写后的查询 │
-             │(检索到的知识) │   │            │
-             └──────┬─────┘   └──────┬─────┘
-                    │                 │
-                    └──────┬──────────┘
-                           │
-                           ▼
-                    ┌──────────────┐
-                    │  组装 Prompt  │ ← Advisor
-                    │ "基于以下资料  │   把资料拼进问题
-                    │  回答问题..." │
-                    └──────┬───────┘
-                           │
-                           ▼
-                    ┌──────────────┐
-                    │  AI 模型回答  │ ← DashScope API
-                    │  基于资料生成  │
-                    └──────────────┘
+用户提问 → 查询重写 → 向量检索 → 组装 Prompt（资料+问题）→ AI 模型回答
 ```
 
 ---
 
-## 六、三套向量数据库对比
-
-这个项目里有三套完全不同的知识库方案。它们互不干扰，各自服务于不同的功能：
+## 九、三套向量数据库对比
 
 | 对比维度 | SimpleVectorStore | 阿里云百炼知识库 | PGVector |
 |----------|------------------|----------------|----------|
-| **配置类** | `LoveAppVectorStoreConfig` | `LoveAppRagCloudAdvisorConfig` | `PgVectorVectorStoreConfig` |
-| **Bean 名** | `loveAppVectorStore` | `loveAppRagCloudAdvisor` | `pgVectorVectorStore` |
-| **存储位置** | Java 内存，重启消失 | 阿里云控制台上传 | PostgreSQL 数据库表 |
-| **数据来源** | 自动加载 `document/*.md` | 手动去阿里云后台传文件 | 通过 Java 代码 INSERT |
-| **检索方式** | `QuestionAnswerAdvisor` 自动调 | `DashScopeDocumentRetriever` | `similaritySearch()` |
-| **目前谁在用** | `recommendPartner()` | `doChatWithRag()` | 只有测试类在用 |
-| **适用场景** | 快速原型、数据量小 | 生产级、数据在云上 | 数据量大、需持久化 |
-
-### 为什么要有三套？
-
-这是从简单到复杂的**学习轨迹**：
-
-1. **SimpleVectorStore（内存）** → 最简单，不用装任何东西，适合入门
-2. **阿里云知识库** → 商业方案，不用自己管理数据库，但花钱
-3. **PGVector** → 自建持久化向量库，完全掌控数据
-
-老师带你走这条路线，是为了让你理解不同方案的取舍。
+| 配置类 | `LoveAppVectorStoreConfig` | `LoveAppRagCloudAdvisorConfig` | `PgVectorVectorStoreConfig` |
+| 存储位置 | Java 内存，重启消失 | 阿里云控制台上传 | PostgreSQL 数据库表 |
+| 数据来源 | 自动加载 `document/*.md` | 手动去阿里云后台传文件 | 通过 Java 代码 INSERT |
+| 目前谁在用 | `recommendPartner()` | `doChatWithRag()` | 只有测试类在用 |
+| 适用场景 | 快速原型、数据量小 | 生产级、数据在云上 | 数据量大、需持久化 |
+| 费用 | 免费 | 按量付费 | 免费（自建 PG） |
 
 ---
 
-## 七、Advisor 拦截器链
+## 十、Advisor 拦截器链
 
-### 什么是 Advisor？
-
-Advisor = Spring AI 里的**拦截器**。在发消息给 AI 之前、收到 AI 回复之后，插入自定义逻辑。
+### Advisor 执行顺序
 
 ```
-用户请求 → [Advisor 1] → [Advisor 2] → [Advisor 3] → AI 模型
-用户响应 ← [Advisor 1] ← [Advisor 2] ← [Advisor 3] ← AI 模型
-```
-
-### 本项目的 Advisor 链
-
-```
-每次 ChatClient 调用，Advisor 按顺序执行：
-
- 1. MyLoggerAdvisor.before()     ← 打印请求日志
- 2. MessageChatMemoryAdvisor     ← 加载聊天历史
- 3. (功能 Advisor)               ← QuestionAnswerAdvisor / loveAppRagCloudAdvisor
- 4. [调用 AI 模型]
- 5. MessageChatMemoryAdvisor     ← 保存聊天历史
- 6. MyLoggerAdvisor.after()      ← 打印响应日志
+请求 → MyLoggerAdvisor.before()         ① 日志
+     → MessageChatMemoryAdvisor.before() ② 加载历史
+     → 功能 Advisor（RAG/向量检索）       ③ 注入知识
+     → [AI 模型调用]
+     → MessageChatMemoryAdvisor.after()  ④ 保存历史
+     → MyLoggerAdvisor.after()           ⑤ 日志
+← 响应
 ```
 
 ### 各 Advisor 详解
 
 | Advisor | 类型 | 作用 |
 |---------|------|------|
-| `MyLoggerAdvisor` | 自定义 | 在 before 打印请求、after 打印响应 |
-| `MessageChatMemoryAdvisor` | Spring AI 内置 | 在 before 把历史消息注入 prompt，在 after 保存本轮对话 |
-| `QuestionAnswerAdvisor` | Spring AI 内置 | 在 before 去 VectorStore 检索相似文档，注入 prompt |
+| `MyLoggerAdvisor` | 自定义 | 打印请求/响应日志 |
+| `MessageChatMemoryAdvisor` | Spring AI 内置 | 加载/保存聊天历史（内存，最多 10 条） |
+| `QuestionAnswerAdvisor` | Spring AI 内置 | 去 VectorStore 检索相似文档，注入 prompt |
 | `loveAppRagCloudAdvisor` | 自定义配置 | 用 `DashScopeDocumentRetriever` 去阿里云知识库检索 |
-| `ReReadingAdvisor` | 自定义 | 把问题重复一遍（Re2 模式），让模型更关注问题本身（**当前未被使用**） |
+| `ReReadingAdvisor` | 自定义 | Re2 重复阅读优化（当前未被使用） |
 
 ---
 
-## 八、聊天记忆机制
-
-### 当前使用的记忆方式
-
-```java
-// LoveApp.java 构造函数
-ChatMemory chatMemory = MessageWindowChatMemory.builder()
-    .maxMessages(10)           // 只记住最近 10 条消息
-    .build();
-```
-
-- 存在**内存**中
-- 按 `chatId` 隔离不同用户
-- 最多 10 条，超出自动丢弃最旧的
-- 重启后丢失
-
-### FileBasedChatMemory（已定义但未启用）
-
-```java
-public class FileBasedChatMemory implements ChatMemory {
-    // 用 Kryo 序列化把聊天记录存到文件
-    // 每个 chatId 对应一个 .kryo 文件
-}
-```
-
-这相当于"升级版"——把聊天记录存到硬盘文件，重启不丢失。但目前 `LoveApp` 没有用这个类，它是留给后续扩展的。
-
----
-
-## 九、配置体系
+## 十一、配置体系
 
 ### 双配置文件
 
@@ -597,20 +580,19 @@ spring:
   ai:
     vectorstore:
       pgvector:
-        index-type: HNSW          # 向量索引算法
-        distance-type: COSINE_DISTANCE  # 余弦相似度
-        dimensions: 1024          # 向量维度（和模型匹配）
-        initialize-schema: true   # 启动自动建表
+        index-type: HNSW
+        distance-type: COSINE_DISTANCE
+        dimensions: 1024
+        initialize-schema: true
 server:
   port: 8123
   servlet:
-    context-path: /api            # 接口前缀
-
+    context-path: /api
 search-api:
-  api-key: xxx                    # searchapi.io 的 API Key（联网搜索用）
+  api-key: xxx
 ```
 
-### application-local.yml（本地）
+### application-local.yml（本地，不提交 Git）
 
 ```yaml
 spring:
@@ -620,319 +602,242 @@ spring:
     password: root
   ai:
     dashscope:
-      api-key: sk-xxx             # 阿里云百炼 API Key
+      api-key: sk-xxx
       chat:
         options:
-          model: deepseek-v4-flash  # 阿里云上的 DeepSeek 模型
+          model: deepseek-v4-flash
 ```
-
-### @SpringBootApplication(exclude = ...)
-
-```java
-@SpringBootApplication(exclude = PgVectorStoreAutoConfiguration.class)
-```
-
-这行排除了 pgvector 的自动配置。为什么？因为 `PgVectorVectorStoreConfig` 已经手动创建了 `pgVectorVectorStore` 这个 Bean，如果保留自动配置，Spring 会再创建一个同名的，导致冲突。
 
 ---
 
-## 十、学习路线：从裸调到业务
+## 十二、API 接口一览
+
+| 接口 | 方法 | 说明 |
+|------|------|------|
+| `/api/healthy` | GET | 健康检查 |
+| `/api/ai/love_app/chat/sync` | GET | 恋爱大师同步调用 |
+| `/api/ai/love_app/chat/sse` | GET | 恋爱大师 SSE 流式 |
+| `/api/ai/manus/chat` | GET | 超级智能体 SSE 流式 |
+| `/api/swagger-ui.html` | GET | Swagger 文档 |
+
+### 请求示例
+
+**恋爱大师 SSE 流式：**
 
 ```
-第 1 层：HttpAiInvoke                    HTTP + Hutool 手写请求
-  │      "原来调用 AI 就是在发 HTTP 请求"
-  │
-  ▼
-第 2 层：SdkAiInvoke                     DashScope SDK 封装
-  │      "SDK 帮我处理了 HTTP 细节"
-  │
-  ▼
-第 3 层：SpringAiInvoke                  Spring AI 的 ChatModel
-  │      "Spring AI 统一了不同厂商的接口"
-  │
-  ▼
-第 4 层：LoveApp (当前)                   ChatClient 编排业务流程
-  │      "加记忆、加 RAG、加工具调用"
-  │
-  ▼
-第 5 层（下一步）：REST 接口              @RestController 暴露给前端
-  │      "把 LoveApp 方法变成 HTTP 接口"
-  │
-  ▼
-第 6 层（未来）：前端页面                 Vue / React / 小程序
-         "真正的用户界面"
+GET http://localhost:8123/api/ai/love_app/chat/sse?message=你好&chatId=love_123456
 ```
 
-每一层都在前一层的**基础上封装复杂性**。你现在在第 4 层，理解了第 4 层就自然明白前面各层为什么存在。
+**超级智能体 SSE 流式：**
+
+```
+GET http://localhost:8123/api/ai/manus/chat?message=北京明天天气怎么样
+```
 
 ---
 
-## 十一、关键概念速查
-
-| 概念 | 一句话解释 | 类比 |
-|------|-----------|------|
-| **ChatModel** | 大模型的 Java 接口 | 打电话给 AI 的电话机 |
-| **ChatClient** | 比 ChatModel 更好用的高级 API | 带自动拨号、录音的电话 |
-| **Prompt** | 发给模型的指令 | 你跟 AI 说的话 |
-| **Advisor** | 拦截器，在请求前后插入逻辑 | 电话的自动应答机 |
-| **VectorStore** | 存语义向量的数据库 | 按意思找书，不是按标题 |
-| **Embedding** | 把文本转成一串数字（向量） | 给每本书算一个"指纹" |
-| **相似度搜索** | 找向量最接近的文档 | 指纹最像的那本书 |
-| **RAG** | 先查资料再回答 | 开卷考试 vs 闭卷考试 |
-| **Function Calling** | AI 决定调用哪个 Java 方法 | AI 会"动手"而不是只动嘴 |
-| **Tool** | AI 可以调用的外部功能（如搜索、写文件） | AI 的"工具包" |
-| **Token** | AI 理解的最小单位（≈0.75 个汉字） | 积木的最小颗粒 |
-| **Query Rewriting** | 把用户问题改得更容易检索 | 把模糊问题改清晰 |
-
----
-
-## 十二、常见问题 FAQ
-
-### Q：启动报错"不支持发行版本 21"怎么办？
-A：你的 JDK 版本低于 21。项目要求 JDK 21。两种方案：
-- 安装 JDK 21 并把系统 `JAVA_HOME` 指向它
-- 在终端临时切换：PowerShell 执行 `$env:JAVA_HOME = "你的JDK21路径"`
-
-### Q：启动报错 `No @Tool annotated methods found` 是什么原因？
-A：`LoveApp.doChatWithTools()` 中用了 `.tools(allTools)`，但 `allTools` 已经是 `ToolCallback[]` 类型，应该用 `.toolCallbacks(allTools)`。Spring AI 1.1.x 中这两个方法用途不同：
-- `tools(Object...)` — 传入普通对象，框架自动扫描 `@Tool` 注解
-- `toolCallbacks(ToolCallback...)` — 传入已经构建好的回调实例
-
-### Q：我可以换成 DeepSeek 官方 API Key 吗？
-A：不能直接换。你当前用的是阿里云百炼的 API Key（`spring.ai.dashscope.api-key`），底层的 DeepSeek 模型也是部署在阿里云上的。想用 DeepSeek 官方 API 需要：
-1. 把 Maven 依赖从 `spring-ai-alibaba-starter-dashscope` 换成对应的 OpenAI 兼容 starter
-2. 修改配置指向 `api.deepseek.com`
-3. RAG 知识库（阿里云百炼独有功能）需要替换方案
-
-简单说：**只换 key 不行，要换整套集成方案。**
-
-### Q：为什么有时启动报错说找不到 Bean？
-A：最常见的原因是 `PgVectorVectorStoreConfig` 里的 bean 名和 `LoveApp` 里的 `@Resource` 字段名对不上。`@Resource` 先按**字段名**匹配 Bean，匹配不上就按**类型**匹配，如果有多个同类型就报错。
-
-### Q：聊天记录存在哪里？
-A：目前存在应用内存里，重启就没了。`FileBasedChatMemory` 是文件持久化版本，但没有启用。
-
-### Q：为什么有 MyLoggerAdvisor 又在 yml 里配置了 SimpleLoggerAdvisor？
-A：yml 里的 `SimpleLoggerAdvisor` 配置被注释掉了（`application.yml` 第 44 行），实际用的是自定义的 `MyLoggerAdvisor`。
-
-### Q：document/ 里的 markdown 文件怎么用？
-A：`LoveAppDocumentLoader` 在启动时通过 `@Resource` 被 `LoveAppVectorStoreConfig` 调用，把文件内容加载到 `SimpleVectorStore` 里供 `recommendPartner()` 使用。
-
-### Q：PgVectorVectorStore 为什么没有用在任何业务方法里？
-A：目前还处于测试阶段。`PgVectorVectorStoreConfigTest` 验证了它能正常工作，但还没有业务方法接入。这是留给后续扩展的"基础设施"。
-
-### Q：文件保存到哪里了？
-A：所有工具生成的文件统一保存在项目根目录的 `tmp/` 下：
-- `./tmp/file/` — 文件读写操作
-- `./tmp/download/` — 资源下载
-- `./tmp/pdf/` — PDF 生成
-
-路径定义在 `FileConstant.File_SAVE_DIR = System.getProperty("user.dir") + "/tmp"`。
-
-### Q：联网搜索需要什么配置？
-A：需要在 `application-local.yml` 中配置 `search-api.api-key`，这是 searchapi.io 的 API Key。不配的话联网搜索工具会报错。
-
----
-
-## 十三、项目面试常见问题
+## 十三、面试常见问题
 
 ### Q1：请你解释一下 RAG 的工作原理，以及在这个项目中是如何实现的？
 
-**考察点**：RAG 理解深度
-
-RAG（检索增强生成）的核心思路是"先查后答"——在让大模型回答问题之前，先从外部知识库检索相关文档 ，
-把这些文档作为上下文注入到 prompt 中，让模型基于真实资料回答，而不是凭空编造。
+RAG（检索增强生成）的核心思路是"先查后答"——在让大模型回答问题之前，先从外部知识库检索相关文档，把这些文档作为上下文注入到 prompt 中，让模型基于真实资料回答，而不是凭空编造。
 
 本项目实现了完整的 RAG 管线：
-
 - **文档加载**：`LoveAppDocumentLoader` 在启动时从 `document/*.md` 读取知识文件
 - **文本分割**：`MyTokenTextSplitter` 按 token 数将长文档切分成小块
 - **关键词增强**：`MyKeywordEnricher` 用 AI 自动给每一段提取关键词标签
 - **查询重写**：`QueryRewriter` 在检索前把用户口语化问题改写得更利于匹配
 - **向量检索**：将问题和文档都转为 embedding 向量，通过相似度计算找到最相关的片段
-- **结果注入**：通过 Advisor 拦截器把检索到的资料拼接到 prompt 中，最终交给模型回答
+- **结果注入**：通过 Advisor 拦截器把检索到的资料拼接到 prompt 中
 
-实现方式上有两套方案：`recommendPartner()` 用内存 `SimpleVectorStore` + `QuestionAnswerAdvisor`，`doChatWithRag()` 用阿里云百炼知识库 + 
-`DashScopeDocumentRetriever`。一个轻量快速，一个生产级云方案。
-
----
-
-### Q2：Spring AI 中 `ChatModel` 和 `ChatClient` 有什么区别？为什么项目用的是 `ChatClient`？
-
-**考察点**：Spring AI 框架理解
-
-`ChatModel` 是底层接口，直接封装对 AI 模型的 HTTP 调用。如果用 `ChatModel`，你要手动拼接 prompt、处理 advisor、管理记忆等。
-
-`ChatClient` 是高级 API，采用 Builder 模式提供了链式调用的流畅 API，内置了对 Advisor 拦截器链、聊天记忆、工具注册、输出解析等功能的支持。
-
-类比：`ChatModel` 就像裸 TCP 连接，`ChatClient` 就像 HTTP 客户端库。项目用 `ChatClient` 是因为业务方法涉及多个横切关注点（日志、记忆、RAG、工具调用），
-用 `ChatClient` 一行 `.advisors()`、`.tools()` 就能搞定，如果用 `ChatModel` 这些全得手写。
+实现方式上有两套方案：`recommendPartner()` 用内存 `SimpleVectorStore` + `QuestionAnswerAdvisor`，`doChatWithRag()` 用阿里云百炼知识库 + `DashScopeDocumentRetriever`。
 
 ---
 
-### Q3：Function Calling（工具调用）在这个项目中是怎么实现的？AI 是如何决定调用哪个工具的？
+### Q2：Spring AI 中 `ChatModel` 和 `ChatClient` 有什么区别？
 
-**考察点**：Function Calling 机制理解
+`ChatModel` 是底层接口，直接封装对 AI 模型的 HTTP 调用。`ChatClient` 是高级 API，采用 Builder 模式提供链式调用，内置了对 Advisor 拦截器链、聊天记忆、工具注册、输出解析等功能的支持。
+
+类比：`ChatModel` 像裸 TCP 连接，`ChatClient` 像 HTTP 客户端库。项目用 `ChatClient` 是因为业务方法涉及多个横切关注点（日志、记忆、RAG、工具调用），用 `ChatClient` 一行 `.advisors()`、`.tools()` 就能搞定。
+
+---
+
+### Q3：Function Calling 在这个项目中是怎么实现的？
 
 实现分为三个层面：
+1. **工具定义**：每个工具是一个普通 Spring Bean，方法上标注 `@Tool` 注解并写明 `description`
+2. **工具注册**：`ToolRegistration.java` 用 `ToolCallbacks.from()` 统一注册为 `ToolCallback[]` Bean
+3. **工具调用**：`LoveApp.doChatWithTools()` 中调用 `.toolCallbacks(allTools)` 把工具列表传给 ChatClient
 
-1. **工具定义**：每个工具是一个普通的 Spring Bean，方法上标注 `@Tool` 注解并写明 `description`。
-Spring AI 启动时扫描这些注解，将方法签名和描述信息注册为模型的 function schema。
-2. **工具注册**：`ToolRegistration.java` 用 `ToolCallbacks.from()` 将所有工具实例统一注册为 `ToolCallback[]` Bean。
-3. **工具调用**：`LoveApp.doChatWithTools()` 中调用 `.toolCallbacks(allTools)` 把工具列表传给 ChatClient。
-
-AI 决定调用哪个工具的机制是：
-- 用户提问后，模型分析用户意图，判断"要回答这个问题，我需要调用什么工具"
-- 模型检查已注册工具的 function schema（描述+参数），选择最匹配的工具
-- 模型返回一个特殊的 function_call 请求，Spring AI 框架拦截这个请求，自动调用对应的 Java 方法
-- 调用结果返回给模型，模型根据结果生成最终回复
-
-关键点：工具描述要写清楚。描述写得模糊，AI 就不知道该不该调用。比如 `@Tool(description: "搜索百度获取最新信息")` 比 `@Tool` 效果好得多。
+AI 决定调用哪个工具的机制：用户提问后，模型分析用户意图，检查已注册工具的 function schema，选择最匹配的工具。Spring AI 框架拦截 function_call 请求，自动调用对应 Java 方法，结果返回给模型生成最终回复。
 
 ---
 
-### Q4：项目中有三套向量数据库，它们分别用在什么场景？为什么要有三套？
+### Q4：项目中有三套向量数据库，为什么要有三套？
 
-**考察点**：架构取舍意识
-
-三套方案对应三种不同的应用场景和学习阶段：
+三套方案对应三种不同的学习阶段和应用场景：
 
 | 方案 | 本质 | 场景 |
 |------|------|------|
-| `SimpleVectorStore` | Java 内存 | 快速原型、小型数据集、开发调试 |
-| 阿里云百炼知识库 | 托管云服务 | 不想运维、愿意付费、快速上线 |
-| PGVector | 自建 PostgreSQL | 生产环境、数据量大、完全掌控 |
+| `SimpleVectorStore` | Java 内存 | 快速原型、小型数据集 |
+| 阿里云百炼知识库 | 托管云服务 | 不想运维、愿意付费 |
+| PGVector | 自建 PostgreSQL | 生产环境、完全掌控 |
 
-为什么要有三套？这是一个从简单到复杂的学习轨迹：
-1. 先用内存方案理解"向量检索是什么"（零依赖，跑起来就明白）
-2. 再用云方案理解"生产环境怎么用"（不用管运维，但知道钱在哪）
-3. 最后用 PGVector 理解"完全自建怎么做"（掌握每个细节）
-
-这在真实开发中很常见——早期快速验证用简单方案，随着业务增长逐步迁移到更强的方案。你不需要一开始就上 PGVector，但你要知道什么时候该换。
+从简单到复杂的学习轨迹：先用内存方案理解"向量检索是什么"（零依赖），再用云方案理解"生产环境怎么用"，最后用 PGVector 理解"完全自建怎么做"。
 
 ---
 
-### Q5：Advisor 拦截器链的执行顺序是怎样的？如何控制顺序？
-
-**考察点**：Spring AI Advisor 机制理解
-
-执行顺序（以 `doChatWithRag()` 为例）：
+### Q5：Advisor 拦截器链的执行顺序是怎样的？
 
 ```
 请求 → MyLoggerAdvisor.before()         ① 日志
      → MessageChatMemoryAdvisor.before() ② 加载历史
-     → loveAppRagCloudAdvisor            ③ RAG 检索
+     → 功能 Advisor（RAG）               ③ 注入知识
      → [AI 模型调用]
      → MessageChatMemoryAdvisor.after()  ④ 保存历史
      → MyLoggerAdvisor.after()           ⑤ 日志
 ← 响应
 ```
 
-控制顺序的方式：Advisor 在 `ChatClient.Builder` 中注册的顺序决定了执行顺序。`LoveApp` 构造函数中：
-
-```java
-this.chatClient = ChatClient.builder(dashscopeChatModel)
-    .defaultSystem(SYSTEM_PROMPT)
-    .defaultAdvisors(
-        new MyLoggerAdvisor(),              // 最先注册 → 最先执行
-        new MessageChatMemoryAdvisor(chatMemory)
-    )
-    .build();
-```
-
-功能特定的 Advisor（如 `QuestionAnswerAdvisor`、`loveAppRagCloudAdvisor`）在具体业务方法中通过 `.advisors()` 追加，排在 defaultAdvisors 之后。
-
-**设计原则**：横切关注点（日志、记忆）放在 defaultAdvisors，功能特定的放在方法级别的 advisors 中。
+Advisor 在 `ChatClient.Builder` 中注册的顺序决定执行顺序。横切关注点（日志、记忆）放在 `defaultAdvisors`，功能特定的放在方法级别的 `.advisors()` 中。
 
 ---
 
-### Q6：Query Rewriting（查询重写）为什么要做？如果不做会怎么样？
-
-**考察点**：RAG 工程实践理解
+### Q6：Query Rewriting（查询重写）为什么要做？
 
 用户的问题往往是口语化的、简短的，直接拿去向量检索效果很差。比如：
+- 用户说："谈了好几年感觉没激情了怎么办" → 期望检索："长期恋爱关系如何维持新鲜感"
+- 用户说："那个程序员多大" → 期望检索："推荐对象的年龄信息"
 
-- 用户说："谈了好几年感觉没激情了怎么办"——向量检索的期望输入应该是"长期恋爱关系如何维持新鲜感"
-- 用户说："那个程序员多大"——期望输入应该是"推荐对象的年龄信息"
-
-`QueryRewriter` 的作用就是用 AI 模型把用户的自然语言问题改写得更"像搜索引擎的关键词"，提升检索召回率。
-
-如果不做查询重写：
-- 向量检索召回的相关文档变少，或者召回的文档不相关
-- 模型基于不相关的资料回答，反而比不用 RAG 效果更差
-- 这就是所谓的"Garbage in, garbage out"
-
-所以查询重写虽然不是 RAG 的必选项，但生产环境中几乎都会加。
+`QueryRewriter` 用 AI 模型把用户自然语言问题改写得更像"搜索引擎的关键词"，提升检索召回率。不做的后果：检索召回的相关文档变少，模型基于不相关的资料回答，反而比不用 RAG 效果更差。
 
 ---
 
-### Q7：Spring AI 中 `.entity(LoveReport.class)` 是怎么工作的？AI 模型怎么知道要输出 JSON？
+### Q7：Spring AI 中 `.entity(LoveReport.class)` 是怎么工作的？
 
-**考察点**：结构化输出原理
-
-`.entity(LoveReport.class)` 背后依赖 `jsonschema-generator` 库：
-
-1. Spring AI 在启动时用该库扫描 `LoveReport.class` 的字段和类型
-2. 生成一个 JSON Schema 描述文件，描述了这个类的结构（有哪些字段、字段类型是什么、是否必填等）
-3. 把这个 JSON Schema 注入到系统 prompt 中，告诉模型"请严格按照这个 JSON 格式输出"
-4. 模型返回 JSON 字符串后，Spring AI 用 Jackson 自动反序列化成 `LoveReport` 对象
-
-关键点：模型的输出格式必须和 JSON Schema 严格匹配。如果字段名对不上，反序列化会失败。所以 `LoveReport` 的字段名要和期望的 JSON key 一致，或者用 `@JsonProperty` 显式映射。
+依赖 `jsonschema-generator` 库：
+1. Spring AI 启动时扫描 `LoveReport.class` 的字段和类型，生成 JSON Schema
+2. 把 JSON Schema 注入系统 prompt，告诉模型"请按这个 JSON 格式输出"
+3. 模型返回 JSON 字符串后，Spring AI 用 Jackson 反序列化成 `LoveReport` 对象
 
 ---
 
-### Q8：项目的配置为什么拆成了 `application.yml` 和 `application-local.yml` 两个文件？拆分原则是什么？
-
-**考察点**：Spring 配置管理意识
+### Q8：项目配置为什么拆成两个文件？
 
 拆分原则：**公共 vs 敏感，环境无关 vs 环境相关**
 
 | 文件 | 存储内容 | 是否提交 Git |
 |------|---------|------------|
-| `application.yml` | 端口、向量库配置、搜索 API key 占位、Swagger 等 | 是 |
-| `application-local.yml` | 数据库连接、阿里云 API Key 等 | 否（`.gitignore`） |
+| `application.yml` | 端口、向量库配置、Swagger 等 | 是 |
+| `application-local.yml` | 数据库连接、API Key 等 | 否 |
 
-这样做的实际好处：
-- **安全**：API Key、数据库密码不会因为误操作提交到 Git
-- **协作**：团队成员可以有自己的 `application-local.yml`，互不干扰
-- **多环境**：可以扩展到 `application-prod.yml`、`application-test.yml`，通过 `spring.profiles.active` 切换
+好处：API Key 不会误提交到 Git、团队成员各自有自己的配置、方便扩展到多环境。
 
 ---
 
-### Q9：项目中 `@SpringBootApplication(exclude = PgVectorStoreAutoConfiguration.class)` 为什么要排除 pgvector 的自动配置？
+### Q9：为什么启动时要排除 `PgVectorStoreAutoConfiguration`？
 
-**考察点**：Spring Boot 自动配置冲突解决
-
-如果不排除 `PgVectorStoreAutoConfiguration`，Spring Boot 会自动创建一个名为 `pgVectorStore` 的 `PgVectorStore` Bean。同时 `PgVectorVectorStoreConfig.java` 中手动 `@Bean` 又创建了一个同名的 Bean。这就导致两个问题：
-
-1. **Bean 冲突**：两个同名 `pgVectorStore` Bean，Spring 不知道注入哪个
-2. **配置覆盖**：自动配置的默认参数可能和手动配置的不一致
-
-解决办法就是二选一——这里选择了手动创建（`PgVectorVectorStoreConfig`），因为需要精细控制 PGVector 的配置参数，所以排除自动配置。
-
-这是 Spring Boot 开发中的常见问题：当你对某个自动配置不满意、需要自定义时，就用 `exclude` 关掉它，自己手写。
+如果不排除，Spring Boot 会自动创建一个 `pgVectorStore` Bean，同时 `PgVectorVectorStoreConfig` 手动创建了同名 Bean，导致冲突。排除自动配置后，手动控制 PGVector 的配置参数。
 
 ---
 
-### Q10：这个项目目前缺少什么？如果要上生产环境，你觉得还需要做什么？
+### Q10：ReAct Agent 模式是什么？和普通对话有什么区别？
 
-**考察点**：全局视野 + 工程经验
+ReAct = Reasoning（推理）+ Acting（行动）。Agent 在每一步中：
+1. **think()**：调用 LLM 分析当前状态，决定是否需要工具
+2. **act()**：如果需要工具，执行工具调用；如果不需要，返回最终回答
 
-项目目前是一个"学习型原型"，距离生产环境还有不少距离：
+和普通对话的区别：
+- 普通对话：一问一答，单次 LLM 调用
+- ReAct Agent：多步循环，每次循环调用 LLM，可自主决定调用多个工具协同完成复杂任务
 
-**必须做的**：
-- **前端界面**：目前只有 API，没有用户界面（第 5-6 层的目标）
-- **认证鉴权**：没有登录、用户识别全靠前端传 chatId，生产环境至少要加 JWT/Session
-- **数据库持久化**：聊天记录在内存（重启丢），推荐数据在内存向量库，需要全部迁移到持久化存储
-- **消息队列**：长时间工具调用（如生成 PDF、搜索）会阻塞 HTTP 请求，需要用 MQ 异步化
+---
 
-**强烈建议的**：
-- **流式响应**：目前是阻塞式等待完整回复，改成 SSE（Server-Sent Events）流式输出用户体验更好
-- **API 限流**：没有调用频率控制，恶意请求可能刷爆 API Key 余额
-- **监控告警**：没有 LLM 调用的延迟、Token 消耗、错误率监控
-- **内容安全审核**：对用户输入和 AI 输出做敏感内容过滤
+### Q11：这个项目中的 SSE 流式输出是怎么实现的？
 
-**可选的**：
-- 多模型切换（目前固定 DeepSeek 模型）
-- 对话历史导出
-- 用户反馈打分系统
+**后端**：`LoveApp.doChatByStream()` 返回 `Flux<String>`，`AiContronller` 中用 `SseEmitter` 订阅 Flux，逐条 `emitter.send(chunk)`。
+
+**前端**：用原生 `fetch` + `ReadableStream` 读取 SSE 数据流，解析 `data:` 开头的行，逐条追加到聊天界面。
+
+**Agent 场景**：`BaseAgent.runStream()` 在每步循环前发送 `[STATUS]` 进度提示，循环结束后发送 `[RESULT]` 最终结果，前端据此区分"处理中"和"最终回答"。
+
+---
+
+## 十四、常见问题 FAQ
+
+### Q：启动报错"不支持发行版本 21"怎么办？
+
+A：JDK 版本低于 21。安装 JDK 21 并设置 `JAVA_HOME`。PowerShell 临时切换：
+```bash
+$env:JAVA_HOME="E:\xuexi_app\jdk_21"
+$env:PATH="$env:JAVA_HOME\bin;$env:PATH"
+```
+
+### Q：启动报错"端口 8123 已被占用"怎么办？
+
+A：先关闭占用端口的进程：
+```bash
+netstat -ano | findstr ":8123"
+taskkill /PID <进程ID> /F
+```
+
+### Q：前端报 404 Not Found 怎么办？
+
+A：检查后端是否启动，以及接口路径是否匹配：
+- 恋爱大师：`/api/ai/love_app/chat/sse`
+- 超级智能体：`/api/ai/manus/chat`
+
+### Q：聊天记录存在哪里？
+
+A：目前存在应用内存里（`MessageWindowChatMemory`，最多 10 条），重启后丢失。`FileBasedChatMemory` 是文件持久化版本，但未启用。
+
+### Q：为什么 AI 恋爱大师很快，超级智能体却慢很多？
+
+A：恋爱大师是单次 LLM 调用（一问一答），超级智能体是 ReAct 多步循环（每步都要调 LLM），一次对话可能调 5~10 次 LLM，自然更慢也更花钱。
+
+### Q：阿里云百炼账户欠费会怎样？
+
+A：后端启动时会报 `HTTP 400 - Arrearage`，无法启动。充值后重启后端即可。
+
+### Q：document/ 里的 markdown 文件怎么用？
+
+A：`LoveAppDocumentLoader` 在启动时通过 `@Resource` 被 `LoveAppVectorStoreConfig` 调用，把文件内容加载到 `SimpleVectorStore` 里供 `recommendPartner()` 使用。
+
+### Q：文件保存到哪里了？
+
+A：所有工具生成的文件保存在项目根目录 `tmp/` 下：
+- `./tmp/file/` — 文件读写
+- `./tmp/download/` — 资源下载
+- `./tmp/pdf/` — PDF 生成
+
+### Q：联网搜索需要什么配置？
+
+A：需要在 `application-local.yml` 中配置 `search-api.api-key`（searchapi.io 的 API Key）。
+
+### Q：前端怎么启动？
+
+A：进入 `yu-ai-agent-frontend` 目录，执行 `npm install` 然后 `npm run dev`。注意不是在项目根目录。
+
+### Q：我可以换成 DeepSeek 官方 API Key 吗？
+
+A：不能直接换。当前用的是阿里云百炼的 API Key，底层 DeepSeek 模型部署在阿里云上。想用 DeepSeek 官方 API 需要换整套集成方案（依赖、配置、RAG 等都需要调整）。
+
+---
+
+## 关键概念速查
+
+| 概念 | 一句话解释 | 类比 |
+|------|-----------|------|
+| ChatModel | 大模型的 Java 接口 | 打电话给 AI 的电话机 |
+| ChatClient | 比 ChatModel 更好用的高级 API | 带自动拨号、录音的电话 |
+| Prompt | 发给模型的指令 | 你跟 AI 说的话 |
+| Advisor | 拦截器，在请求前后插入逻辑 | 电话的自动应答机 |
+| VectorStore | 存语义向量的数据库 | 按意思找书，不是按标题 |
+| Embedding | 把文本转成一串数字（向量） | 给每本书算一个"指纹" |
+| RAG | 先查资料再回答 | 开卷考试 vs 闭卷考试 |
+| Function Calling | AI 决定调用哪个 Java 方法 | AI 会"动手"而不只是动嘴 |
+| Agent | 能自主决策、调用工具完成任务的 AI | 有手有脑的 AI 助手 |
+| ReAct | 思考-行动循环模式 | 想一步，做一步，直到完成 |
+| SSE | 服务器推送事件，流式输出 | 水管流水，实时显示 |
+| Token | AI 理解的最小单位（≈0.75 个汉字） | 积木的最小颗粒 |
+| Query Rewriting | 把用户问题改得更容易检索 | 把模糊问题改清晰 |

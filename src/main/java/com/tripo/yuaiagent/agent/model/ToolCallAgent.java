@@ -29,6 +29,9 @@ public class ToolCallAgent extends ReActAgent {
     // 保存工具调用信息
     private ChatResponse toolCallChatResponse;
 
+    // 保存 LLM 在思考时生成的文本（可能在调用工具时也生成了回答文本）
+    private String lastAssistantText;
+
     // 禁用 SpringAI 内置工具调用机制，使用自定义的
     private final ChatOptions chatOptions;
 
@@ -87,6 +90,8 @@ public class ToolCallAgent extends ReActAgent {
                     )
                     .collect(Collectors.joining("\n"));
             log.info(toolCallInfo);
+            // 保存 LLM 本次思考的文本回答（即使调用了工具也可能有文本）
+            this.lastAssistantText = result;
             // 如果不需要调用工具，返回false
             if (toolCallList.isEmpty()) {
                 // 只有不调用工具时添加助手消息
@@ -122,14 +127,29 @@ public class ToolCallAgent extends ReActAgent {
 
         ToolResponseMessage toolResponseMessage = (ToolResponseMessage) CollUtil.getLast(toolExecutionResult.conversationHistory());
 
-        String results = toolResponseMessage.getResponses().stream()
-                .map(response -> "工具 " + response.name() + " 完成了它的任务！结果: " + response.responseData())
-                .collect(Collectors.joining("\n"));
         boolean terminateToolCalled = toolResponseMessage.getResponses().stream()
                 .anyMatch(response -> "doTerminate".equals(response.name()));
         if (terminateToolCalled) {
             setState(AgentState.FINISHED);
+            // 优先使用 LLM 本次思考生成的回答文本（提示词已要求 LLM 先回答再 terminate）
+            AssistantMessage assistantMessage = toolCallChatResponse.getResult().getOutput();
+            String assistantText = assistantMessage.getText();
+            if (StrUtil.isNotBlank(assistantText)) {
+                // LLM 生成了文本回答（如天气总结），返回该文本而不是原始工具结果
+                return assistantText;
+            }
+            // 如果 LLM 调用 terminate 时没有生成文本，尝试使用上一次保存的思考文本
+            if (StrUtil.isNotBlank(this.lastAssistantText)) {
+                return this.lastAssistantText;
+            }
+            // 都没有文本时返回简洁的完成信息
+            return "任务已完成！";
         }
+
+        // 普通工具调用（非 terminate），返回结构化结果
+        String results = toolResponseMessage.getResponses().stream()
+                .map(response -> "工具 " + response.name() + " 完成了它的任务！结果: " + response.responseData())
+                .collect(Collectors.joining("\n"));
         log.info(results);
         return results;
     }

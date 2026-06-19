@@ -17,6 +17,7 @@ spring:
 
     mcp:
       client:
+        enabled: false  # 如果不需要MCP服务器，取消注释这行
         sse:
           connections:
             server1:
