@@ -1,6 +1,7 @@
 ### CUSTOM
 application-local.yml
 tmp
+.m2/
 mcp-servers.json
 面试中常见的问题.md
 

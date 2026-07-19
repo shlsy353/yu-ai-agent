@@ -7,7 +7,15 @@
 > **构建工具**：Maven + JDK 21 / npm + Vite
 > **数据库**：PostgreSQL + PGVector（向量检索）
 > **文档**：Swagger (Knife4j) — http://localhost:8123/api/swagger-ui.html
+快速启动项目预览：
+> 
+> 
+>   $env:JAVA_HOME="E:\xuexi_app\jdk_21"
+    $env:PATH="$env:JAVA_HOME\bin;$env:PATH"
+    $env:DASHSCOPE_API_KEY="你的新DashScope Key"
+    $env:SEARCH_API_KEY="你的Search API Key"
 
+mvn "-Dmaven.repo.local=E:\ieda_project\yu-ai-agent\.m2\repository" spring-boot:run
 ---
 
 ## 目录

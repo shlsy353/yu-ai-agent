@@ -8,9 +8,9 @@ spring:
     name: yu-ai-agent
   ai:
     dashscope:
-      api-key: ${DASHSCOPE_API_KEY:sk-679c5650ca48440c8dc6b73b77c99ef8} # 你的阿里云百炼Key
+      api-key: ${DASHSCOPE_API_KEY:}
       chat:
         options:
-          model: deepseek-v4-flash # 阿里云上的DeepSeek模型名，和你之前用的一致
+          model: deepseek-v4-flash
           result-format: message
 

@@ -12,7 +12,7 @@ import org.springframework.stereotype.*;
 public class ImageSearchTool {
 
 
-    private static final String API_KEY = "TUqmLz7cP86Sjcu6T6PMHWL6CC1iLEkQTJBLStS99n6OA7gAT9ce9hm4";
+    private static final String API_KEY_ENV = "PEXELS_API_KEY";
 
 
     private static final String API_URL = "https://api.pexels.com/v1/search";
@@ -40,7 +40,11 @@ public class ImageSearchTool {
     public List<String> searchMediumImages(String query) {
 
         Map<String, String> headers = new HashMap<>();
-        headers.put("Authorization", API_KEY);
+        String apiKey = System.getenv(API_KEY_ENV);
+        if (StrUtil.isBlank(apiKey)) {
+            throw new IllegalStateException("Missing " + API_KEY_ENV + " environment variable");
+        }
+        headers.put("Authorization", apiKey);
 
 
         Map<String, Object> params = new HashMap<>();

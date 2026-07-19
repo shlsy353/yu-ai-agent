@@ -15,7 +15,7 @@ public class YuImageSearchMcpServerApplication {
     }
 
     @Bean
-    public ToolCallbackProvider imageSearchTools(ImageSearchTool imageSearchTool) {
+    public ToolCallbackProvider imageSearchTools(com.tripo.yuimagesearchmcpserver.tools.ImageSearchTool imageSearchTool) {
         return MethodToolCallbackProvider.builder()
                 .toolObjects(imageSearchTool)
                 .build();

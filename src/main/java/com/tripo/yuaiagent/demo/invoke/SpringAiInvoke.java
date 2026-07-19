@@ -5,6 +5,7 @@ import org.springframework.ai.chat.messages.*;
 import org.springframework.ai.chat.model.*;
 import org.springframework.ai.chat.prompt.*;
 import org.springframework.boot.*;
+import org.springframework.boot.autoconfigure.condition.*;
 import org.springframework.stereotype.*;
 
 /**
@@ -14,6 +15,7 @@ import org.springframework.stereotype.*;
  * @create 2023-05-09 10:05
  */
 @Component
+@ConditionalOnProperty(prefix = "demo.invoke", name = "enabled", havingValue = "true")
 public class SpringAiInvoke implements CommandLineRunner {
 
     @Resource

@@ -51,7 +51,11 @@ springdoc:
 
   # searchAPI
 search-api:
-  api-key: 5o4Hq9RFqkGHyom2GhzzMXpx
+  api-key: ${SEARCH_API_KEY:}
+
+demo:
+  invoke:
+    enabled: false
 
 logging:
   level:

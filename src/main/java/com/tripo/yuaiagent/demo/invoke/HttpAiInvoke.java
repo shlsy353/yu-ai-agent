@@ -14,7 +14,10 @@ public class HttpAiInvoke {
 
     public static void main(String[] args) {
         // 你的 API Key
-        String apiKey = "sk-679c5650ca48440c8dc6b73b77c99ef8";
+        String apiKey = System.getenv("DASHSCOPE_API_KEY");
+        if (apiKey == null || apiKey.isBlank()) {
+            throw new IllegalStateException("Missing DASHSCOPE_API_KEY environment variable");
+        }
 
         // 请求地址（阿里云百炼统一接口）
         String url = "https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation";

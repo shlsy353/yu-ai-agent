@@ -44,7 +44,7 @@ public class SdkAiInvoke {
     private static GenerationParam buildGenerationParam(Message userMsg) {
         return GenerationParam.builder()
                 // 若没有配置环境变量，请用阿里云百炼API Key将下行替换为：.apiKey("sk-xxx")
-                .apiKey("sk-679c5650ca48440c8dc6b73b77c99ef8")
+                .apiKey(System.getenv("DASHSCOPE_API_KEY"))
                 .model("deepseek-v4-pro")
                 .enableThinking(true)
                 .incrementalOutput(true)
